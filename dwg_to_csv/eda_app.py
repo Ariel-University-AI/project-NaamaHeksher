@@ -130,14 +130,36 @@ st.markdown("""
         background: linear-gradient(180deg, #1e1b4b 0%, #312e81 100%);
     }
 
+    /* Sidebar Titles (App Name) */
+    [data-testid="stSidebar"] h2 {
+        color: #ffffff !important;
+        font-weight: 800 !important;
+        font-size: 1.8rem !important;
+        text-shadow: 0 2px 15px rgba(139, 92, 246, 0.6);
+        letter-spacing: 0.5px;
+    }
+
+    /* Navigation / Radio labels (Pages) */
+    [data-testid="stSidebar"] .stRadio > label {
+        color: #ffffff !important;
+        font-size: 1.2rem !important;
+        font-weight: 700 !important;
+    }
+    
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label p {
+        color: #ffffff !important;
+        font-weight: 600 !important;
+        font-size: 1.1rem !important;
+    }
+
     [data-testid="stSidebar"] .stMarkdown p {
         color: #c7d2fe;
     }
 
     /* Selectbox styling */
-    .stSelectbox label {
-        color: #a5b4fc !important;
-        font-weight: 500;
+    .stSelectbox > label {
+        color: #ffffff !important;
+        font-weight: 600 !important;
     }
 
     /* Data table */
@@ -199,8 +221,10 @@ SCATTER_COLORS = px.colors.qualitative.Pastel
 # ═══════════════════════════════════════════════════════════
 
 @st.cache_data
-def load_data(file_path):
-    df = pd.read_csv(file_path, encoding="utf-8-sig")
+def load_data(uploaded_file):
+    if hasattr(uploaded_file, 'seek'):
+        uploaded_file.seek(0)
+    df = pd.read_csv(uploaded_file, encoding="utf-8-sig")
     return df
 
 
@@ -243,26 +267,11 @@ if app_page == "ℹ️ אודות המערכת":
     st.stop()
 
 with st.sidebar:
-    # File selection
-    data_dir = Path(r"C:\Users\HOME\Desktop\אלי ספרא\data")
-    csv_files = list(data_dir.glob("*.csv"))
-
-    if csv_files:
-        target_file = "961-MGR-332-1-140426_cleaned.csv"
-        default_idx = 0
-        for i, f in enumerate(csv_files):
-            if f.name == target_file:
-                default_idx = i
-                break
-
-        selected_file = st.selectbox(
-            "📁 בחר קובץ CSV",
-            csv_files,
-            index=default_idx,
-            format_func=lambda x: x.name,
-        )
-    else:
-        st.error("❌ לא נמצאו קבצי CSV בתיקיית data")
+    # File Upload (Cloud Compatible)
+    selected_file = st.file_uploader("📁 העלה קובץ CSV", type=["csv"])
+    
+    if not selected_file:
+        st.info("👆 אנא העלה קובץ CSV כדי להמשיך.")
         st.stop()
 
     st.markdown("---")
@@ -285,7 +294,7 @@ df = load_data(selected_file)
 
 with st.sidebar:
     st.markdown("---")
-    st.markdown("### 🎛️ סינון נתונים")
+    st.markdown("<h3 style='color: #f472b6; text-shadow: 0 0 5px rgba(244,114,182,0.4); margin-bottom: 10px;'>🎛️ סינון נתונים</h3>", unsafe_allow_html=True)
     if 'Layer' in df.columns:
         all_layers = df['Layer'].unique().tolist()
         # By default, select all layers or a subset if too many
@@ -434,7 +443,6 @@ if app_page == "🧩 Clustering":
 st.markdown(f"""
 <div class="main-header">
     <h1>📊 EDA Dashboard</h1>
-    <p>ניתוח חקירתי — {selected_file.name}</p>
 </div>
 """, unsafe_allow_html=True)
 
