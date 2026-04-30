@@ -10,6 +10,9 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from pathlib import Path
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 
 # ═══════════════════════════════════════════════════════════
 # Page Configuration
@@ -209,7 +212,7 @@ with st.sidebar:
     st.markdown("## 🗺️ SurveyGIS")
     st.markdown("---")
     
-    app_page = st.radio("📌 ניווט", ["📊 EDA Dashboard", "ℹ️ אודות המערכת"])
+    app_page = st.radio("📌 ניווט", ["📊 EDA Dashboard", "🧩 Clustering", "ℹ️ אודות המערכת"])
     st.markdown("---")
 
 if app_page == "ℹ️ אודות המערכת":
@@ -304,6 +307,124 @@ all_cols = df.columns.tolist()
 total_cells = df.shape[0] * df.shape[1]
 missing_cells = df.isnull().sum().sum()
 missing_pct = (missing_cells / total_cells * 100) if total_cells > 0 else 0
+
+# ═══════════════════════════════════════════════════════════
+# Clustering Page Logic
+# ═══════════════════════════════════════════════════════════
+
+if app_page == "🧩 Clustering":
+    st.markdown(f'''
+    <div class="main-header">
+        <h1>🧩 Clustering (K-Means)</h1>
+        <p>ניתוח אשכולות — {selected_file.name}</p>
+    </div>
+    ''', unsafe_allow_html=True)
+    
+    st.markdown('<div class="section-header">🎛️ הגדרות מודל</div>', unsafe_allow_html=True)
+    
+    if len(numeric_cols) < 2:
+        st.warning("⚠️ נדרשות לפחות 2 עמודות מספריות לביצוע Clustering.")
+    else:
+        col_sel1, col_sel2, col_sel3 = st.columns([2, 1, 1])
+        with col_sel1:
+            selected_features = st.multiselect(
+                "בחר עמודות מספריות (לפחות 2):",
+                options=numeric_cols,
+                default=numeric_cols[:2] if len(numeric_cols) >= 2 else []
+            )
+        with col_sel2:
+            k_clusters = st.slider("בחר מספר אשכולות (K):", min_value=2, max_value=8, value=3)
+        with col_sel3:
+            st.markdown("<br>", unsafe_allow_html=True)
+            use_scaler = st.checkbox("הפעל נרמול (StandardScaler)", value=True)
+        
+        if len(selected_features) >= 2:
+            # Run KMeans
+            X = df[selected_features].dropna()
+            if X.empty:
+                st.error("❌ הנתונים שנבחרו ריקים לאחר הסרת ערכים חסרים.")
+            else:
+                st.markdown('<div class="section-header">📉 גרף Elbow (מציאת K אופטימלי)</div>', unsafe_allow_html=True)
+                
+                st.info("""
+                **מה זה גרף Elbow (מרפק)?**  
+                גרף זה עוזר לנו למצוא את מספר האשכולות (K) האופטימלי. הוא מציג את מדד ה-Inertia (סכום ריבועי המרחקים של הנקודות ממרכזי האשכולות שלהן) עבור ערכים שונים של K. ככל שה-Inertia נמוך יותר, האשכולות צפופים יותר.
+
+                **איך בוחרים K?**  
+                מחפשים את נקודת ה"מרפק" בגרף — הנקודה שבה הירידה התלולה ב-Inertia מתחילה להתמתן משמעותית (כמו צורה של זרוע כפופה). נקודה זו מייצגת לרוב את האיזון הטוב ביותר: הוספת אשכולות נוספים מעבר לנקודה זו כבר לא תורמת משמעותית לדחיסות.
+                """)
+                
+                # Scaler logic for elbow
+                X_elbow = StandardScaler().fit_transform(X) if use_scaler else X.values
+                
+                inertias = []
+                K_range = range(1, 11)
+                for k in K_range:
+                    km = KMeans(n_clusters=k, random_state=42, n_init='auto')
+                    km.fit(X_elbow)
+                    inertias.append(km.inertia_)
+                
+                fig_elbow = px.line(
+                    x=list(K_range), y=inertias, markers=True,
+                    title="Elbow Method For Optimal K" + (" (עם StandardScaler)" if use_scaler else " (ללא נרמול)"),
+                    labels={"x": "מספר אשכולות (K)", "y": "Inertia (SSW)"}
+                )
+                fig_elbow.update_traces(line_color="#c084fc", marker=dict(size=8, color="#818cf8"))
+                fig_elbow.update_layout(**PLOTLY_LAYOUT)
+                st.plotly_chart(fig_elbow, use_container_width=True)
+                
+                st.markdown('<div class="section-header">🔬 תוצאות אשכול (Scatter Plot)</div>', unsafe_allow_html=True)
+                
+                def create_cluster_plot(X_raw, clusters_labels, title, apply_scaling=False):
+                    if apply_scaling:
+                        X_val = StandardScaler().fit_transform(X_raw)
+                    else:
+                        X_val = X_raw.values
+                        
+                    if X_raw.shape[1] > 2:
+                        pca = PCA(n_components=2)
+                        X_pca = pca.fit_transform(X_val)
+                        plot_df = pd.DataFrame(X_pca, columns=['PC1', 'PC2'])
+                        plot_df['Cluster'] = clusters_labels.astype(str)
+                        
+                        fig = px.scatter(plot_df, x='PC1', y='PC2', color='Cluster',
+                                         color_discrete_sequence=SCATTER_COLORS, title=title + " (PCA 2D)")
+                    else:
+                        plot_df = X_raw.copy()
+                        plot_df['Cluster'] = clusters_labels.astype(str)
+                        feat_x = X_raw.columns[0]
+                        feat_y = X_raw.columns[1]
+                        
+                        fig = px.scatter(plot_df, x=feat_x, y=feat_y, color='Cluster',
+                                         color_discrete_sequence=SCATTER_COLORS, title=title)
+                    
+                    fig.update_traces(marker=dict(size=8, line=dict(width=1, color='rgba(255,255,255,0.2)')))
+                    fig.update_layout(**PLOTLY_LAYOUT)
+                    return fig
+
+                km_unscaled = KMeans(n_clusters=k_clusters, random_state=42, n_init='auto')
+                clusters_unscaled = km_unscaled.fit_predict(X)
+
+                if use_scaler:
+                    km_scaled = KMeans(n_clusters=k_clusters, random_state=42, n_init='auto')
+                    clusters_scaled = km_scaled.fit_predict(StandardScaler().fit_transform(X))
+                    
+                    col_plot1, col_plot2 = st.columns(2)
+                    with col_plot1:
+                        st.plotly_chart(create_cluster_plot(X, clusters_unscaled, f"ללא נרמול (K={k_clusters})", apply_scaling=False), use_container_width=True)
+                    with col_plot2:
+                        st.plotly_chart(create_cluster_plot(X, clusters_scaled, f"עם נרמול (K={k_clusters})", apply_scaling=True), use_container_width=True)
+                else:
+                    st.plotly_chart(create_cluster_plot(X, clusters_unscaled, f"K-Means (K={k_clusters}) - ללא נרמול", apply_scaling=False), use_container_width=True)
+        else:
+            st.warning("⚠️ יש לבחור לפחות 2 עמודות להצגת הגרפים.")
+            
+    st.markdown('''
+    <div class="footer">
+        🗺️ Clustering Dashboard — Built with Streamlit, Plotly & Scikit-Learn
+    </div>
+    ''', unsafe_allow_html=True)
+    st.stop()
 
 
 # ═══════════════════════════════════════════════════════════
