@@ -51,6 +51,7 @@ openpyxl==3.1.5
 streamlit>=1.30.0
 plotly>=5.18.0
 scikit-learn>=1.4.0
+matplotlib>=3.8.0
 
 # --- PDF Reports ---
 reportlab==4.2.5
