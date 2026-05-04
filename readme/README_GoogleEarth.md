@@ -5,6 +5,8 @@
 **מערכת מידע גאוגרפי מבוססת Google Earth** 
 **לניהול, שליפה והצגת מדידות במשרד מדידות**
 
+🔗 **[למעבר לאפליקציית חקר הנתונים (Streamlit) לחץ כאן](https://cautious-space-rotary-phone-5gw6j59xvxvrf4qv-8501.app.github.dev/)** 🔗
+
 `v1.0.0` · אפריל 2026
 
 </div>

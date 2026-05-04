@@ -41,56 +41,56 @@
 - [ ] יצירת `requirements.txt` + `app.py`
 - [ ] Push ל-GitHub
 
-### שבוע 4 (16/04) — בסיס נתונים + אימות + CRUD
+### שבוע 4 (16/04) — בסיס נתונים + אימות + CRUD ✅
 
-- [ ] כתיבת מודלים SQLAlchemy + GeoAlchemy2 (users, clients, projects, survey_types, survey_files, geo_features)
-- [ ] הפעלת PostGIS extension
-- [ ] הרצת מיגרציה ראשונה (Alembic)
-- [ ] כתיבת Seed — נתוני דוגמה (5 פרויקטים, 3 משתמשים, 3 לקוחות)
-- [ ] מערכת הרשמה/כניסה (Flask-JWT-Extended + bcrypt)
-- [ ] אימות Google Workspace (OAuth2)
-- [ ] Middleware להרשאות RBAC (admin/manager/surveyor)
-- [ ] API: CRUD פרויקטים (GET/POST/PUT/DELETE)
-- [ ] API: CRUD לקוחות
-- [ ] Postman Collection מוכנה לבדיקות
+- [x] כתיבת מודלים SQLAlchemy + GeoAlchemy2 (users, clients, projects, survey_types, survey_files, geo_features)
+- [x] הפעלת PostGIS extension
+- [x] הרצת מיגרציה ראשונה (Alembic)
+- [x] כתיבת Seed — נתוני דוגמה (5 פרויקטים, 3 משתמשים, 3 לקוחות)
+- [x] מערכת הרשמה/כניסה (Flask-JWT-Extended + bcrypt)
+- [x] אימות Google Workspace (OAuth2)
+- [x] Middleware להרשאות RBAC (admin/manager/surveyor)
+- [x] API: CRUD פרויקטים (GET/POST/PUT/DELETE)
+- [x] API: CRUD לקוחות
+- [x] Postman Collection מוכנה לבדיקות
 
-### שבוע 5 (23/04) — M2: Google Earth API + העלאת קבצים
+### שבוע 5 (23/04) — M2: Google Earth API + העלאת קבצים ✅
 
-- [ ] הגדרת Google Earth API key
-- [ ] רכיב React: מפת Google Earth אינטראקטיבית
-- [ ] שליפת פרויקטים מ-API והצגה כ-KML Markers
-- [ ] Popup/Info Window בלחיצה על מרקר (שם, סטטוס, תאריך, לקוח)
-- [ ] Layout: Header + Sidebar + Map
-- [ ] ממשק העלאה (React-Dropzone) עם Drag & Drop
-- [ ] Parser ל-DXF: חילוץ שכבות, נקודות, קווים, פוליגונים
-- [ ] Parser ל-CSV: יצירת נקודות מ-X,Y,Z
-- [ ] המרת קואורדינטות ל-WGS84 (Proj4js) להצגה ב-Google Earth
-- [ ] שמירת geo_features ב-DB + הצגה על המפה
+- [x] הגדרת Google Earth API key
+- [x] רכיב React: מפת Google Earth אינטראקטיבית
+- [x] שליפת פרויקטים מ-API והצגה כ-KML Markers
+- [x] Popup/Info Window בלחיצה על מרקר (שם, סטטוס, תאריך, לקוח)
+- [x] Layout: Header + Sidebar + Map
+- [x] ממשק העלאה (React-Dropzone) עם Drag & Drop
+- [x] Parser ל-DXF: חילוץ שכבות, נקודות, קווים, פוליגונים
+- [x] Parser ל-CSV: יצירת נקודות מ-X,Y,Z
+- [x] המרת קואורדינטות ל-WGS84 (Proj4js) להצגה ב-Google Earth
+- [x] שמירת geo_features ב-DB + הצגה על המפה
 
-### שבוע 6 (30/04) — חיפוש מרחבי + סינון + UI
+### שבוע 6 (30/04) — חיפוש מרחבי + סינון + UI ✅
 
-- [ ] כלי ציור על המפה (מלבן/עיגול/פוליגון)
-- [ ] API: `POST /api/search/spatial` — חיפוש PostGIS
-- [ ] סינון לפי טווח תאריכים (date picker)
-- [ ] סינון לפי סוג מדידה (dropdown)
-- [ ] סינון משולב (אזור + תאריכים + סוג)
-- [ ] תוצאות: רשימה + הדגשה על המפה
-- [ ] Dashboard ראשי עם סטטיסטיקות (כרטיסיות KPI + גרפים)
-- [ ] שיפור ממשק: ניווט, Sidebar, Responsive Design
+- [x] כלי ציור על המפה (מלבן/עיגול/פוליגון)
+- [x] API: `POST /api/search/spatial` — חיפוש PostGIS
+- [x] סינון לפי טווח תאריכים (date picker)
+- [x] סינון לפי סוג מדידה (dropdown)
+- [x] סינון משולב (אזור + תאריכים + סוג)
+- [x] תוצאות: רשימה + הדגשה על המפה
+- [x] Dashboard ראשי עם סטטיסטיקות (כרטיסיות KPI + גרפים)
+- [x] שיפור ממשק: ניווט, Sidebar, Responsive Design
 
-### שבוע 7 (07/05) — Google Sheets + Validation
+### שבוע 7 (07/05) — Google Sheets + Validation ✅
 
-- [ ] הגדרת Google Service Account
-- [ ] חיבור ל-Google Sheets API (googleapis)
-- [ ] קריאת יומן עבודות קיים מה-Sheet
-- [ ] הצגת עבודות מהיומן כשכבה על Google Earth
-- [ ] סנכרון: יצירת פרויקט במערכת → שורה חדשה ב-Sheet
-- [ ] סנכרון: עדכון סטטוס ב-Sheet → עדכון במערכת
-- [ ] Validation: Marshmallow / Pydantic בכל API endpoints
-- [ ] Error handling מרוכז (middleware)
-- [ ] Loading states + Error states ב-UI
+- [x] הגדרת Google Service Account
+- [x] חיבור ל-Google Sheets API (googleapis)
+- [x] קריאת יומן עבודות קיים מה-Sheet
+- [x] הצגת עבודות מהיומן כשכבה על Google Earth
+- [x] סנכרון: יצירת פרויקט במערכת → שורה חדשה ב-Sheet
+- [x] סנכרון: עדכון סטטוס ב-Sheet → עדכון במערכת
+- [x] Validation: Marshmallow / Pydantic בכל API endpoints
+- [x] Error handling מרוכז (middleware)
+- [x] Loading states + Error states ב-UI
 
-### שבוע 8 (14/05) — M3: Deploy + פרסום
+### שבוע 8 (14/05) — M3: Deploy + פרסום 📅
 
 - [ ] Build: Docker images (client + server)
 - [ ] Deploy לשרת (VPS / Cloud Run / Railway)
@@ -101,7 +101,7 @@
 - [ ] בדיקת המערכת בטלפון נייד
 - [ ] בדיקות E2E: תהליך מלא מקצה לקצה
 
-### שבוע 9 (28/05) — מרתון פיתוח — שיפורים
+### שבוע 9 (28/05) — מרתון פיתוח — שיפורים 📅
 
 - [ ] הפקת דוח PDF (סיכום פרויקט)
 - [ ] ייצוא נתונים ל-KMZ / DXF / SHP / CSV
@@ -112,7 +112,7 @@
 - [ ] תיעוד API (Swagger / OpenAPI)
 - [ ] תיקון באגים אחרונים
 
-### שבוע 10 (11/06) — סופי: Demo Day 🎓
+### שבוע 10 (11/06) — סופי: Demo Day 🎓 📅
 
 - [ ] הכנת תסריט הצגה (Demo Script)
 - [ ] הכנת מצגת
