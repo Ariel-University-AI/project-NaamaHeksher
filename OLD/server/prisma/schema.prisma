@@ -1,0 +1,14 @@
+// TODO: סכמת Prisma — תיבנה בשבוע 4
+// כרגע skeleton בלבד
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// TODO: טבלאות — ייבנו בשבוע 4
+// users, clients, projects, survey_types, survey_files, geo_features, project_tags, activity_log

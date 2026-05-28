@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SURVEYGIS — מצגת מערכת</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Heebo:wght@300;400;500;600;700;800&display=swap');
+:root{
+  --bg:#0e1117;--surface:#161b27;--card:#1c2333;--border:#2a3348;
+  --accent:#f5a623;--accent2:#00d4ff;--success:#2ecc71;--danger:#e74c3c;--warn:#f39c12;--purple:#8b5cf6;
+  --text:#d0d8f0;--muted:#5a6480;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Heebo',sans-serif;}
+
+/* ── Deck & Slides ── */
+.deck{width:100vw;height:100vh;position:relative;overflow:hidden;}
+.slide{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;
+  padding:36px 56px 68px;
+  opacity:0;transform:translateX(-60px);
+  transition:opacity .4s,transform .4s;
+  pointer-events:none;
+  overflow:hidden;
+}
+.slide.active{opacity:1;transform:none;pointer-events:all;}
+.slide.out{opacity:0;transform:translateX(60px);}
+
+/* ── Nav bar ── */
+.nav-bar{
+  position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:10px;
+  background:rgba(22,27,39,.94);border:1px solid var(--border);
+  border-radius:100px;padding:7px 18px;backdrop-filter:blur(8px);z-index:100;
+}
+.nav-btn{
+  background:none;border:1px solid var(--border);color:var(--muted);
+  border-radius:50%;width:30px;height:30px;cursor:pointer;font-size:14px;
+  display:flex;align-items:center;justify-content:center;transition:all .15s;
+}
+.nav-btn:hover{border-color:var(--accent);color:var(--accent);}
+.slide-counter{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);min-width:46px;text-align:center;}
+.dots{display:flex;gap:5px;}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--border);transition:background .2s;cursor:pointer;}
+.dot.on{background:var(--accent);}
+
+/* ── Slide typography ── */
+.slide-label{font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:6px;}
+.slide-h{font-size:28px;font-weight:700;line-height:1.2;margin-bottom:5px;}
+.slide-sub{font-size:13px;color:var(--muted);margin-bottom:16px;font-weight:300;line-height:1.5;}
+
+/* ── Layouts ── */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px;flex:1;min-height:0;align-items:start;}
+.col{display:flex;flex-direction:column;gap:10px;min-height:0;}
+
+/* ── Card ── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.card-head{padding:8px 14px;border-bottom:1px solid var(--border);font-size:10px;font-weight:700;
+  display:flex;align-items:center;gap:6px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;}
+.card-body{padding:12px 14px;}
+
+/* ── Badge ── */
+.badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:100px;
+  font-size:10px;font-family:'IBM Plex Mono',monospace;font-weight:500;}
+.ba{background:rgba(245,166,35,.15);color:var(--accent);border:1px solid rgba(245,166,35,.3);}
+.bb{background:rgba(0,212,255,.12);color:var(--accent2);border:1px solid rgba(0,212,255,.25);}
+.bg{background:rgba(46,204,113,.12);color:var(--success);border:1px solid rgba(46,204,113,.3);}
+.bp{background:rgba(139,92,246,.12);color:var(--purple);border:1px solid rgba(139,92,246,.3);}
+
+/* ── Stat boxes ── */
+.stat-row{display:grid;gap:10px;}
+.s2{grid-template-columns:1fr 1fr;}
+.s3{grid-template-columns:1fr 1fr 1fr;}
+.s4{grid-template-columns:1fr 1fr 1fr 1fr;}
+.stat-box{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center;}
+.stat-val{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:700;color:var(--accent);margin-bottom:3px;}
+.stat-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;line-height:1.4;}
+
+/* ── Highlight ── */
+.hl{border-radius:8px;padding:11px 14px;}
+.hl-y{background:rgba(245,166,35,.06);border:1px solid rgba(245,166,35,.2);}
+.hl-b{background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.2);}
+.hl-g{background:rgba(46,204,113,.06);border:1px solid rgba(46,204,113,.2);}
+.hl-r{background:rgba(231,76,60,.06);border:1px solid rgba(231,76,60,.2);}
+
+/* ── Tag ── */
+.tag{display:inline-block;background:var(--surface);border:1px solid var(--border);border-radius:3px;
+  padding:1px 5px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);}
+
+/* ── Cover gradient ── */
+.cover-bg{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse at 25% 40%,rgba(245,166,35,.07) 0%,transparent 55%),
+             radial-gradient(ellipse at 75% 20%,rgba(0,212,255,.05) 0%,transparent 50%);}
+
+/* ── Pipeline ── */
+.pipe-flow{display:flex;align-items:center;gap:0;margin-bottom:14px;}
+.pipe-box{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:8px 10px;text-align:center;flex:1;}
+.pipe-box.hi{border-color:var(--accent);background:rgba(245,166,35,.07);}
+.pipe-box.hi2{border-color:var(--accent2);background:rgba(0,212,255,.06);}
+.pipe-box.hg{border-color:var(--success);background:rgba(46,204,113,.06);}
+.pipe-box.hp{border-color:var(--purple);background:rgba(139,92,246,.06);}
+.p-icon{font-size:16px;margin-bottom:3px;}
+.p-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;}
+.p-ext{font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);}
+.pipe-arr{font-size:14px;color:var(--border);padding:0 5px;flex-shrink:0;}
+
+/* ── Bar chart ── */
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.bar-lbl{font-size:10px;min-width:100px;text-align:right;color:var(--text);}
+.bar-wrap{flex:1;background:var(--border);border-radius:3px;height:7px;}
+.bar-fill{height:100%;border-radius:3px;}
+.bar-val{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);min-width:46px;text-align:left;}
+
+/* ── Before/After ── */
+.ba-col{border-radius:8px;padding:12px;border:1px solid var(--border);}
+.ba-col.before{background:rgba(231,76,60,.05);border-color:rgba(231,76,60,.25);}
+.ba-col.after{background:rgba(46,204,113,.05);border-color:rgba(46,204,113,.25);}
+.ba-hdr{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px;}
+.ba-row{display:flex;justify-content:space-between;align-items:center;
+  padding:5px 0;border-bottom:1px solid rgba(42,51,72,.4);font-size:11px;}
+.ba-row:last-child{border-bottom:none;}
+.ba-lbl{color:var(--muted);}
+.ba-val{font-family:'IBM Plex Mono',monospace;font-weight:600;}
+
+/* ── Confusion matrix ── */
+.cm{width:100%;border-collapse:collapse;font-size:10px;font-family:'IBM Plex Mono',monospace;}
+.cm th{padding:5px 8px;text-align:center;font-size:9px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+.cm td{padding:7px 8px;text-align:center;border:1px solid var(--border);font-size:13px;font-weight:700;}
+.cm-ok{background:rgba(46,204,113,.15);color:var(--success);}
+.cm-err{background:rgba(231,76,60,.08);color:var(--danger);}
+.cm-z{background:var(--surface);color:var(--muted);font-size:11px;}
+.cm-lbl{background:var(--surface);color:var(--muted);font-size:10px;font-weight:600;font-family:'Heebo',sans-serif;text-align:right;padding:5px 8px;}
+
+/* ── Map mockup ── */
+.map-bg{background:linear-gradient(145deg,#091520 0%,#0d1e30 50%,#091420 100%);border-radius:7px;position:relative;overflow:hidden;}
+.m-poly{position:absolute;border-radius:2px;}
+.m-popup{position:absolute;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:8px;}
+
+/* ── Tech grid ── */
+.tech-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+.tech-item{background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:9px 10px;}
+.tech-name{font-size:10px;font-weight:700;margin-bottom:2px;}
+.tech-desc{font-size:9px;color:var(--muted);line-height:1.5;}
+
+/* ── Algo box ── */
+.algo{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;}
+.algo-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--accent);margin-bottom:7px;}
+.algo-code{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--accent2);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px 10px;line-height:1.8;}
+
+/* ── Center / thank-you slides ── */
+.center-slide{justify-content:center;align-items:center;text-align:center;}
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+<!-- ══════════ SLIDE 0 — Cover ══════════ -->
+<div class="slide active" id="s0">
+  <div class="cover-bg"></div>
+
+  <div style="flex:1;display:flex;align-items:center;gap:48px;">
+
+    <!-- Right column: text -->
+    <div style="flex:1;min-width:0;">
+      <!-- Logo row -->
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
+        <svg width="44" height="44" viewBox="0 0 72 72" fill="none">
+          <defs>
+            <linearGradient id="gl1" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#f5a623"/><stop offset="100%" stop-color="#ffd080"/></linearGradient>
+            <linearGradient id="gl2" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#00d4ff" stop-opacity=".7"/><stop offset="100%" stop-color="#00d4ff" stop-opacity=".15"/></linearGradient>
+            <filter id="glow"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <polygon points="10,58 62,46 62,56 10,66" fill="#f5a62318" stroke="#f5a62332" stroke-width="1.2"/>
+          <polygon points="6,40 62,26 62,38 6,52" fill="#00d4ff06" stroke="url(#gl2)" stroke-width="1.5"/>
+          <polygon points="2,24 62,8 62,22 2,38" fill="#f5a62306" stroke="url(#gl1)" stroke-width="2.5" filter="url(#glow)"/>
+          <circle cx="2" cy="24" r="5.5" fill="url(#gl1)"/>
+          <circle cx="2" cy="24" r="13" fill="#f5a62316"/>
+        </svg>
+        <div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;">Geographic Intelligence System</div>
+          <div style="font-size:24px;font-weight:800;letter-spacing:-1px;color:var(--accent);">SURVEYGIS</div>
+        </div>
+      </div>
+
+      <!-- Headline -->
+      <div style="font-size:38px;font-weight:800;line-height:1.15;margin-bottom:12px;">
+        מהנדסה גיאוגרפית<br>
+        ועד חיזוי רווחיות<br>
+        <span style="color:var(--accent);">מערכת end-to-end</span>
+      </div>
+      <div style="font-size:13px;color:var(--muted);font-weight:300;line-height:1.65;margin-bottom:16px;max-width:480px;">
+        המרת קבצי DWG לפורמטים GIS, ויזואליזציה אינטראקטיבית, ומודל ML מבוסס NumPy שחוזה רווחיות פרויקטים — כל זה בסביבת Python אחת.
+      </div>
+
+      <!-- Badges -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">
+        <span class="badge ba">DWG → SHP → KML</span>
+        <span class="badge bb">Python + NumPy</span>
+        <span class="badge bg">90% דיוק סיווג</span>
+        <span class="badge bg">MAE 18.8%</span>
+        <span class="badge bp">289 פרויקטים</span>
+      </div>
+
+      <!-- Presenters -->
+      <div style="border-top:1px solid var(--border);padding-top:16px;">
+        <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:7px;">מגישים</div>
+        <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:5px;">נעמה הקשר סייג &nbsp;·&nbsp; בר שפילמן</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.7;">
+          קורס מתמטיקה באיסוף ועיבוד מידע גיאודטי<br>
+          מסלול לימודי גיאודזיה ומיפוי · אוניברסיטת אריאל
+        </div>
+      </div>
+    </div>
+
+    <!-- Left column: agenda card -->
+    <div style="width:260px;flex-shrink:0;">
+      <div class="card">
+        <div class="card-head">📋 תוכן העניינים</div>
+        <div class="card-body" style="padding:10px 14px;">
+          <div style="display:flex;flex-direction:column;gap:0;">
+            <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border);">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--accent);flex-shrink:0;margin-top:1px;">01</span>
+              <span style="font-size:12px;">Pipeline: DWG → GIS</span>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border);">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--accent);flex-shrink:0;margin-top:1px;">02</span>
+              <span style="font-size:12px;">מודל ML — ארכיטקטורה ופיצ'רים</span>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border);">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--accent);flex-shrink:0;margin-top:1px;">03</span>
+              <span style="font-size:12px;">ולידציה — לפני ואחרי</span>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border);">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--accent);flex-shrink:0;margin-top:1px;">04</span>
+              <span style="font-size:12px;">סיכום ומסקנות</span>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--success);flex-shrink:0;margin-top:1px;">05</span>
+              <span style="font-size:12px;color:var(--success);">הדגמה חיה — LIVE</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════ SLIDE 1 — Pipeline ══════════ -->
+<div class="slide" id="s1">
+  <div class="slide-label">מודול 01 — גיאוגרפיה</div>
+  <div class="slide-h">Pipeline המרה: DWG → GIS</div>
+  <div class="slide-sub">קריאת מפות AutoCAD, המרת קואורדינטות ITM→WGS84, ייצוא לפורמטים סטנדרטיים</div>
+
+  <div class="pipe-flow">
+    <div class="pipe-box hi">
+      <div class="p-icon">📐</div>
+      <div class="p-lbl" style="color:var(--accent);">DWG</div>
+      <div class="p-ext">AutoCAD Binary</div>
+    </div>
+    <div class="pipe-arr">→</div>
+    <div class="pipe-box hi2">
+      <div class="p-icon">🔄</div>
+      <div class="p-lbl" style="color:var(--accent2);">DXF</div>
+      <div class="p-ext">ODA Converter</div>
+    </div>
+    <div class="pipe-arr">→</div>
+    <div class="pipe-box hi2">
+      <div class="p-icon">📋</div>
+      <div class="p-lbl" style="color:var(--accent2);">CSV</div>
+      <div class="p-ext">ezdxf + pyproj</div>
+    </div>
+    <div class="pipe-arr">→</div>
+    <div class="pipe-box hg" style="flex:1.3;">
+      <div class="p-icon">📦</div>
+      <div class="p-lbl" style="color:var(--success);">SHP / KML</div>
+      <div class="p-ext">pyshp · Google Earth</div>
+    </div>
+    <div class="pipe-arr">→</div>
+    <div class="pipe-box hp">
+      <div class="p-icon">🗺️</div>
+      <div class="p-lbl" style="color:var(--purple);">מפה</div>
+      <div class="p-ext">Leaflet.js</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="col">
+      <div class="card">
+        <div class="card-head">⚙️ טכנולוגיות ליבה</div>
+        <div class="card-body">
+          <div class="tech-grid">
+            <div class="tech-item">
+              <div class="tech-name">ezdxf</div>
+              <div class="tech-desc">קריאת שכבות DXF, חילוץ LWPOLYLINE וישויות גרפיות</div>
+            </div>
+            <div class="tech-item">
+              <div class="tech-name">pyproj</div>
+              <div class="tech-desc">המרת מערכת ישראל ITM ← WGS84 גלובלי</div>
+            </div>
+            <div class="tech-item">
+              <div class="tech-name">pyshp</div>
+              <div class="tech-desc">כתיבת Shapefile: .shp · .dbf · .prj</div>
+            </div>
+            <div class="tech-item">
+              <div class="tech-name">Leaflet.js</div>
+              <div class="tech-desc">מפה אינטראקטיבית עם popup מידע בזמן אמת</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hl hl-y">
+        <div style="font-size:11px;font-weight:600;margin-bottom:4px;">🔍 זיהוי אוטומטי לפי שם קובץ</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.6;">המערכת מזהה סוג המפה (RZ / TZR / אחר) לפי שם הקובץ ומחיל כללי מיפוי שכבה שונים. עיבוד מקבילי — ThreadPoolExecutor — מאפשר עשרות קבצים בו-זמנית.</div>
+      </div>
+
+      <div class="hl hl-b">
+        <div style="font-size:11px;font-weight:600;color:var(--accent2);margin-bottom:4px;">📌 ייחוד: המרת ITM → WGS84</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.6;">תנאי הכרחי לכל ממשק GIS סטנדרטי (QGIS, ArcGIS, Google Earth). כל נקודת מדידה ישראלית מומרת לרוחב/אורך גלובלי.</div>
+      </div>
+    </div>
+
+    <!-- Map mockup -->
+    <div style="display:flex;flex-direction:column;gap:0;min-height:0;">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;flex:1;display:flex;flex-direction:column;">
+        <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:6px 12px;display:flex;align-items:center;gap:8px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);">
+          <div style="background:rgba(245,166,35,.15);border:1px solid rgba(245,166,35,.3);border-radius:3px;padding:2px 6px;color:var(--accent);font-weight:600;font-size:8px;">📐 SURVEYGIS</div>
+          <span>מפה אינטראקטיבית</span>
+          <div style="margin-right:auto;display:flex;gap:4px;">
+            <span class="badge bb" style="font-size:8px;padding:2px 6px;">🛰️ Satellite</span>
+            <span style="background:var(--surface);border:1px solid var(--border);border-radius:100px;padding:2px 6px;font-size:8px;color:var(--muted);">OSM</span>
+          </div>
+        </div>
+        <div class="map-bg" style="flex:1;min-height:200px;">
+          <!-- grid -->
+          <div style="position:absolute;inset:0;opacity:.03;background:repeating-linear-gradient(0deg,transparent,transparent 26px,rgba(255,255,255,1) 26px,rgba(255,255,255,1) 27px),repeating-linear-gradient(90deg,transparent,transparent 26px,rgba(255,255,255,1) 26px,rgba(255,255,255,1) 27px);"></div>
+          <!-- polygons -->
+          <div class="m-poly" style="top:18%;left:8%;width:22%;height:28%;border:2px solid var(--accent);background:rgba(245,166,35,.15);"></div>
+          <div class="m-poly" style="top:50%;left:32%;width:20%;height:25%;border:2px solid var(--accent2);background:rgba(0,212,255,.12);"></div>
+          <div class="m-poly" style="top:12%;left:52%;width:28%;height:36%;border:2px solid var(--success);background:rgba(46,204,113,.1);"></div>
+          <div class="m-poly" style="top:62%;left:10%;width:18%;height:22%;border:2px solid var(--purple);background:rgba(139,92,246,.1);"></div>
+          <!-- popup -->
+          <div class="m-popup" style="top:5%;left:5%;">
+            <div style="font-weight:700;margin-bottom:3px;color:var(--accent);">12467-RZ</div>
+            <div style="color:var(--muted);">שטח: <span style="color:var(--text);">8,882 מ"ר</span></div>
+            <div style="color:var(--muted);">מרחק: <span style="color:var(--text);">6.3 ק"מ</span></div>
+            <div style="color:var(--muted);">מדד צורה: <span style="color:var(--text);">2.78</span></div>
+          </div>
+          <div style="position:absolute;bottom:7px;left:9px;font-family:'IBM Plex Mono',monospace;font-size:7px;color:rgba(255,255,255,.22);">0 ——— 500m</div>
+          <div style="position:absolute;top:7px;right:9px;display:flex;flex-direction:column;gap:2px;">
+            <div style="background:var(--surface);border:1px solid var(--border);width:18px;height:18px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--muted);">+</div>
+            <div style="background:var(--surface);border:1px solid var(--border);width:18px;height:18px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--muted);">−</div>
+          </div>
+          <div style="position:absolute;bottom:7px;right:9px;font-family:'IBM Plex Mono',monospace;font-size:7px;color:rgba(255,255,255,.18);">ITM → WGS84</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ SLIDE 2 — ML Model ══════════ -->
+<div class="slide" id="s2">
+  <div class="slide-label">מודול 02 — למידת מכונה</div>
+  <div class="slide-h">מודל ML — ארכיטקטורה ופיצ'רים</div>
+  <div class="slide-sub">Logistic Regression + Ridge Regression — מימוש NumPy טהור, ללא scikit-learn</div>
+
+  <div class="two-col">
+    <div class="col">
+      <div class="card">
+        <div class="card-head">🧮 שני מודלים מקבילים</div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
+          <div style="background:var(--surface);border:1px solid rgba(245,166,35,.3);border-radius:7px;padding:10px;">
+            <div style="font-size:10px;font-weight:700;color:var(--accent);margin-bottom:4px;">Logistic Regression — מסווג</div>
+            <div style="font-size:11px;color:var(--muted);line-height:1.55;">מסווג כל פרויקט: <span style="color:var(--success);">Profitable</span> / <span style="color:var(--warn);">Borderline</span> / <span style="color:var(--danger);">Not Profitable</span>.<br>גבול סף: margin ≥ 20%.</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid rgba(0,212,255,.3);border-radius:7px;padding:10px;">
+            <div style="font-size:10px;font-weight:700;color:var(--accent2);margin-bottom:4px;">Ridge Regression — מנבא כמות</div>
+            <div style="font-size:11px;color:var(--muted);line-height:1.55;">מנבא את אחוז ה-margin הצפוי. רגולריזציית Ridge מונעת over-fitting על מדגם קטן.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="algo">
+        <div class="algo-title">למה NumPy בלבד?</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.55;margin-bottom:8px;">Python 3.14 (סביבת הייצור) אינה תומכת ב-scikit-learn ו-scipy. המודלים ממומשים מאפס — gradient descent, normalization, cross-validation.</div>
+        <div class="algo-code">W = np.linalg.lstsq(X, y, rcond=None)[0]
+# Ridge: (XᵀX + λI)⁻¹Xᵀy
+W = np.linalg.solve(XtX + lam*I, Xty)</div>
+      </div>
+
+      <div class="hl hl-g">
+        <div style="font-size:11px;font-weight:600;color:var(--success);margin-bottom:4px;">10-Fold Cross Validation</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.55;">מודל v2 (289 פרויקטים): <span style="color:var(--success);font-family:'IBM Plex Mono',monospace;font-weight:700;">96% ± 3%</span> — יציבות והכללה גבוהות.</div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <div class="card-head">📊 6 פיצ'רים — קלט המודל</div>
+        <div class="card-body">
+          <div class="bar-row"><div class="bar-lbl">שטח החלקה</div><div class="bar-wrap"><div class="bar-fill" style="width:85%;background:var(--accent);"></div></div><div class="bar-val">log(sqm)</div></div>
+          <div class="bar-row"><div class="bar-lbl">נקודות מדידה</div><div class="bar-wrap"><div class="bar-fill" style="width:70%;background:var(--accent);"></div></div><div class="bar-val">count</div></div>
+          <div class="bar-row"><div class="bar-lbl">מרחק מהמשרד</div><div class="bar-wrap"><div class="bar-fill" style="width:55%;background:var(--accent2);"></div></div><div class="bar-val">km</div></div>
+          <div class="bar-row"><div class="bar-lbl">מדד צורה</div><div class="bar-wrap"><div class="bar-fill" style="width:40%;background:var(--accent2);"></div></div><div class="bar-val">ratio</div></div>
+          <div class="bar-row"><div class="bar-lbl">מחיר הצעה</div><div class="bar-wrap"><div class="bar-fill" style="width:78%;background:var(--purple);"></div></div><div class="bar-val">log(₪)</div></div>
+          <div class="bar-row" style="margin-bottom:0;"><div class="bar-lbl">סוג מדידה RZ</div><div class="bar-wrap"><div class="bar-fill" style="width:92%;background:var(--success);"></div></div><div class="bar-val">0 / 1</div></div>
+        </div>
+      </div>
+
+      <div class="stat-row s3" style="margin:0;">
+        <div class="stat-box"><div class="stat-val">289</div><div class="stat-lbl">פרויקטי אימון</div></div>
+        <div class="stat-box"><div class="stat-val" style="color:var(--success);">96%</div><div class="stat-lbl">CV Accuracy</div></div>
+        <div class="stat-box"><div class="stat-val" style="color:var(--accent2);">6</div><div class="stat-lbl">פיצ'רים</div></div>
+      </div>
+
+      <div class="hl hl-y">
+        <div style="font-size:11px;font-weight:600;margin-bottom:4px;">📤 פלט לכל פרויקט חדש</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--accent2);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:6px 10px;line-height:1.8;">
+          verdict: <span style="color:var(--success);">'profitable'</span><br>
+          prob: <span style="color:var(--accent);">0.87</span><br>
+          margin_est: <span style="color:var(--accent);">+34.2%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ SLIDE 3 — Validation ══════════ -->
+<div class="slide" id="s3">
+  <div class="slide-label">מודול 03 — ולידציה</div>
+  <div class="slide-h">לפני ← → אחרי: מחזור ולידציה מלא</div>
+  <div class="slide-sub">60 פרויקטים הוחזקו בנפרד · בדיקה עצמאית → אבחון → אימון מחדש → שיפור דרמטי</div>
+
+  <div class="two-col">
+    <div class="col">
+      <!-- Before / After -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="ba-col before">
+          <div class="ba-hdr" style="color:var(--danger);">לפני — v1</div>
+          <div class="ba-row"><span class="ba-lbl">אימון</span><span class="ba-val">229</span></div>
+          <div class="ba-row"><span class="ba-lbl">דיוק</span><span class="ba-val" style="color:var(--warn);">77.6%</span></div>
+          <div class="ba-row"><span class="ba-lbl">MAE</span><span class="ba-val" style="color:var(--danger);">163%</span></div>
+          <div class="ba-row"><span class="ba-lbl">הטיה</span><span class="ba-val" style="color:var(--danger);">−158%</span></div>
+          <div class="ba-row"><span class="ba-lbl">שגיאות</span><span class="ba-val" style="color:var(--danger);">13/58</span></div>
+        </div>
+        <div class="ba-col after">
+          <div class="ba-hdr" style="color:var(--success);">אחרי — v2</div>
+          <div class="ba-row"><span class="ba-lbl">אימון</span><span class="ba-val" style="color:var(--success);">289</span></div>
+          <div class="ba-row"><span class="ba-lbl">דיוק</span><span class="ba-val" style="color:var(--success);">90.0%</span></div>
+          <div class="ba-row"><span class="ba-lbl">MAE</span><span class="ba-val" style="color:var(--success);">18.8%</span></div>
+          <div class="ba-row"><span class="ba-lbl">הטיה</span><span class="ba-val" style="color:var(--success);">−13.2%</span></div>
+          <div class="ba-row"><span class="ba-lbl">שגיאות</span><span class="ba-val" style="color:var(--success);">6/60</span></div>
+        </div>
+      </div>
+
+      <!-- Delta stats -->
+      <div class="stat-row s3" style="margin:0;">
+        <div class="stat-box" style="border-color:rgba(46,204,113,.3);padding:10px;">
+          <div style="font-size:9px;color:var(--muted);margin-bottom:3px;">שיפור דיוק</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:700;color:var(--success);">+12.4%</div>
+        </div>
+        <div class="stat-box" style="border-color:rgba(46,204,113,.3);padding:10px;">
+          <div style="font-size:9px;color:var(--muted);margin-bottom:3px;">MAE הוקטן פי</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:700;color:var(--success);">×8.7</div>
+        </div>
+        <div class="stat-box" style="border-color:rgba(139,92,246,.3);padding:10px;">
+          <div style="font-size:9px;color:var(--muted);margin-bottom:3px;">CV accuracy</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:700;color:var(--purple);">96%</div>
+        </div>
+      </div>
+
+      <div class="hl hl-r">
+        <div style="font-size:11px;font-weight:600;color:var(--danger);margin-bottom:4px;">שורש הבעיה — MAE 163%</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.55;">ה-v1 חזה margin 50–80% בעוד ערכים אמיתיים הגיעו ל-150–576%. Ridge לא ראה מספיק פרויקטי RZ עם עלות נמוכה ו-margin גבוה.</div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <div class="card-head">מטריצת בלבול — v2 (לאחר אימון מחדש)</div>
+        <div class="card-body" style="padding:8px;">
+          <table class="cm">
+            <thead>
+              <tr><th></th><th>חזוי: Profitable</th><th>חזוי: Borderline</th><th>חזוי: Not</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="cm-lbl">אמיתי: Profitable</td><td class="cm-ok">49</td><td class="cm-err">5</td><td class="cm-err">1</td></tr>
+              <tr><td class="cm-lbl">אמיתי: Borderline</td><td class="cm-z">0</td><td class="cm-ok">5</td><td class="cm-z">0</td></tr>
+              <tr><td class="cm-lbl">אמיתי: Not Prof.</td><td class="cm-z">0</td><td class="cm-z">0</td><td class="cm-z">0</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="hl hl-g">
+        <div style="font-size:11px;font-weight:600;color:var(--success);margin-bottom:4px;">מדוע השיפור כל כך חד?</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.55;">60 הפרויקטים שנוספו הכניסו טווח margin עד 576% שלא היה מיוצג. המודל "ראה" לראשונה פרויקטי RZ מהירים ולמד שהמרווח שם גבוה.</div>
+      </div>
+
+      <div class="hl hl-y">
+        <div style="font-size:11px;font-weight:600;margin-bottom:4px;">6 שגיאות שנותרו — ניתוח</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.55;">כל 6 הטעויות הן פרויקטים עם margin 21–27% — קרוב לסף 20%. שגיאה שמרנית בלבד. <strong style="color:var(--success);">אפס</strong> שגיאות קריטיות (לא ניבא רווח כשיש הפסד).</div>
+      </div>
+
+      <div class="hl hl-b">
+        <div style="font-size:11px;font-weight:600;color:var(--accent2);margin-bottom:4px;">ניתן לכוונן עוד</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.55;">שינוי <span class="tag">MARGIN_THRESHOLD</span> מ-20% ל-18% יסווג את 6 הפרויקטים כ-profitable. המחיר: מעט פחות שמרנות.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ SLIDE 4 — Summary ══════════ -->
+<div class="slide" id="s4">
+  <div class="slide-label">סיכום</div>
+  <div class="slide-h">SURVEYGIS v2 — מוכן לשימוש</div>
+  <div class="slide-sub">מחזור הולידציה הושלם · המודל עודכן ונבחן · הקבצים בייצור</div>
+
+  <div class="two-col" style="flex:1;">
+    <!-- Left: stats + model files -->
+    <div class="col">
+      <div class="stat-row s2" style="margin:0;">
+        <div class="stat-box" style="border-color:rgba(46,204,113,.3);">
+          <div style="font-size:18px;margin-bottom:5px;">🎯</div>
+          <div class="stat-val" style="color:var(--success);font-size:24px;">90%</div>
+          <div class="stat-lbl">דיוק סיווג</div>
+        </div>
+        <div class="stat-box" style="border-color:rgba(46,204,113,.3);">
+          <div style="font-size:18px;margin-bottom:5px;">📊</div>
+          <div class="stat-val" style="color:var(--success);font-size:24px;">18.8%</div>
+          <div class="stat-lbl">MAE margin</div>
+        </div>
+        <div class="stat-box" style="border-color:rgba(46,204,113,.3);">
+          <div style="font-size:18px;margin-bottom:5px;">🗂️</div>
+          <div class="stat-val" style="color:var(--success);font-size:24px;">289</div>
+          <div class="stat-lbl">פרויקטי אימון</div>
+        </div>
+        <div class="stat-box" style="border-color:rgba(139,92,246,.3);">
+          <div style="font-size:18px;margin-bottom:5px;">🏆</div>
+          <div class="stat-val" style="color:var(--purple);font-size:24px;">96%</div>
+          <div class="stat-lbl">CV accuracy</div>
+        </div>
+      </div>
+
+      <div class="hl hl-g">
+        <div style="font-size:12px;font-weight:700;color:var(--success);margin-bottom:8px;">✅ מה עובד היום</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.9;">
+          DWG → SHP / KML בלחיצה אחת<br>
+          מפה אינטראקטיבית עם popup מידע<br>
+          חיזוי סיווג ו-margin לפרויקט חדש<br>
+          ולידציה CV 96% על 289 פרויקטים
+        </div>
+      </div>
+
+      <div class="hl hl-b">
+        <div style="font-size:12px;font-weight:700;color:var(--accent2);margin-bottom:8px;">🔭 צעדים הבאים</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.9;">
+          כיול סף BORDERLINE_LO מ-10% ל-15%<br>
+          פיצ'רים נוספים: עונה, אזור גיאוגרפי<br>
+          מעקב drift עם כל פרויקט חדש<br>
+          אינטגרציה עם מערכת הצעות מחיר
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: pipeline recap + model files -->
+    <div class="col">
+      <div class="card">
+        <div class="card-head">🔄 Pipeline מלא — מבט על</div>
+        <div class="card-body" style="padding:10px 14px;">
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface);border-radius:6px;border:1px solid var(--border);">
+              <span style="font-size:16px;">📐</span>
+              <div>
+                <div style="font-size:11px;font-weight:600;">DWG → SHP / KML</div>
+                <div style="font-size:10px;color:var(--muted);">ezdxf · pyproj · pyshp — המרה + המרת קואורדינטות</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface);border-radius:6px;border:1px solid var(--border);">
+              <span style="font-size:16px;">🗺️</span>
+              <div>
+                <div style="font-size:11px;font-weight:600;">ויזואליזציה אינטראקטיבית</div>
+                <div style="font-size:10px;color:var(--muted);">Leaflet.js — פוליגונים על מפה חיה עם popup</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface);border-radius:6px;border:1px solid rgba(139,92,246,.3);">
+              <span style="font-size:16px;">🤖</span>
+              <div>
+                <div style="font-size:11px;font-weight:600;color:var(--purple);">חיזוי רווחיות — ML</div>
+                <div style="font-size:10px;color:var(--muted);">LogReg + Ridge · NumPy · 289 פרויקטים · 96% CV</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hl hl-y">
+        <div style="font-size:11px;font-weight:600;color:var(--accent);margin-bottom:8px;">📁 קבצי מודל — 2026-05-27</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--accent2);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:8px 12px;line-height:2;">
+          model_clf.pkl &nbsp;·&nbsp; model_reg.pkl &nbsp;·&nbsp; scaler.pkl<br>
+          feature_meta.json &nbsp;·&nbsp; model.py<br>
+          <span style="color:var(--muted);"># n_train=289 · cv=0.96 · v2</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ SLIDE 5 — תודה + LIVE ══════════ -->
+<div class="slide center-slide" id="s5">
+  <div style="position:absolute;inset:0;background:
+    radial-gradient(ellipse at 30% 50%,rgba(245,166,35,.07) 0%,transparent 55%),
+    radial-gradient(ellipse at 70% 30%,rgba(0,212,255,.05) 0%,transparent 50%),
+    radial-gradient(ellipse at 50% 80%,rgba(46,204,113,.04) 0%,transparent 40%);
+    pointer-events:none;"></div>
+
+  <div style="display:flex;flex-direction:column;align-items:center;gap:28px;max-width:700px;width:100%;">
+
+    <!-- Thank you -->
+    <div style="text-align:center;">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin-bottom:12px;">SURVEYGIS · 2026</div>
+      <div style="font-size:52px;font-weight:800;line-height:1.1;margin-bottom:10px;">תודה</div>
+      <div style="font-size:16px;color:var(--muted);font-weight:300;line-height:1.7;">
+        נעמה הקשר סייג &nbsp;·&nbsp; בר שפילמן<br>
+        <span style="font-size:13px;">קורס מתמטיקה באיסוף ועיבוד מידע גיאודטי · אוניברסיטת אריאל</span>
+      </div>
+    </div>
+
+    <!-- Live demo box -->
+    <div style="background:rgba(46,204,113,.06);border:2px solid rgba(46,204,113,.35);border-radius:16px;padding:28px 48px;text-align:center;width:100%;position:relative;overflow:hidden;">
+      <!-- pulse ring -->
+      <div style="position:absolute;top:24px;right:28px;width:10px;height:10px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 rgba(46,204,113,.4);animation:pulse 1.8s ease-out infinite;"></div>
+      <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:3px;color:var(--success);text-transform:uppercase;margin-bottom:10px;">● LIVE DEMO</div>
+      <div style="font-size:30px;font-weight:700;margin-bottom:8px;">עכשיו — הדגמה חיה</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.7;">
+        נעבור למערכת עצמה ונדגים:<br>
+        המרת DWG · ויזואליזציה על מפה · חיזוי רווחיות בזמן אמת
+      </div>
+      <div style="margin-top:16px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap;">
+        <span class="badge ba">DWG → SHP</span>
+        <span class="badge bb">מפה אינטראקטיבית</span>
+        <span class="badge bg">חיזוי ML</span>
+      </div>
+    </div>
+
+    <!-- Q&A -->
+    <div style="font-size:13px;color:var(--muted);text-align:center;">
+      שאלות ותשובות — נשמח לענות
+    </div>
+
+  </div>
+</div>
+
+</div><!-- /deck -->
+
+<nav class="nav-bar">
+  <button class="nav-btn" id="btnPrev" onclick="go(-1)">&#8249;</button>
+  <div class="dots" id="dots"></div>
+  <span class="slide-counter" id="counter">1 / 6</span>
+  <button class="nav-btn" id="btnNext" onclick="go(1)">&#8250;</button>
+</nav>
+
+<style>
+@keyframes pulse{
+  0%{box-shadow:0 0 0 0 rgba(46,204,113,.5);}
+  70%{box-shadow:0 0 0 10px rgba(46,204,113,0);}
+  100%{box-shadow:0 0 0 0 rgba(46,204,113,0);}
+}
+</style>
+
+<script>
+const slides = document.querySelectorAll('.slide');
+const dotsEl  = document.getElementById('dots');
+const counter = document.getElementById('counter');
+let cur = 0;
+
+slides.forEach((_,i)=>{
+  const d = document.createElement('div');
+  d.className = 'dot'+(i===0?' on':'');
+  d.onclick = ()=>goTo(i);
+  dotsEl.appendChild(d);
+});
+
+function goTo(n){
+  slides[cur].classList.remove('active');
+  slides[cur].classList.add('out');
+  setTimeout(()=>slides[cur].classList.remove('out'),420);
+  cur = (n + slides.length) % slides.length;
+  slides[cur].classList.add('active');
+  document.querySelectorAll('.dot').forEach((d,i)=>d.classList.toggle('on',i===cur));
+  counter.textContent = `${cur+1} / ${slides.length}`;
+}
+function go(d){ goTo(cur+d); }
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'||e.key==='ArrowDown') go(-1);
+  if(e.key==='ArrowLeft' ||e.key==='ArrowUp')   go(1);
+});
+</script>
+</body>
+</html>

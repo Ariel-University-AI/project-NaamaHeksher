@@ -1,0 +1,3929 @@
+﻿<!DOCTYPE html>
+<html lang="he" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DWG → DXF → CSV → SHP/KML Pipeline</title>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0e1520;--surface:#141e2c;--surface2:#172030;--card:#182238;--border:#1e2a3a;
+  --accent:#f5a623;--accent2:#00d4ff;--success:#2ecc71;--danger:#e74c3c;--warn:#f39c12;--purple:#8b5cf6;
+  --text:#e8eef8;--muted:#4a6070;--mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+  --map-bg:#090d18;--map-grid:#172030;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;display:flex;flex-direction:column;}
+
+/* ── Header ── */
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;flex-shrink:0;}
+.logo{display:flex;align-items:center;gap:12px;}
+.logo-icon{width:32px;height:32px;border-radius:6px;background:rgba(245,166,35,.15);border:1px solid rgba(245,166,35,.3);display:flex;align-items:center;justify-content:center;font-size:16px;}
+.logo-text{font-family:var(--mono);font-weight:600;font-size:15px;letter-spacing:.5px;}
+.logo-sub{font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:1px;}
+.hbadges{display:flex;gap:8px;align-items:center;}
+.badge{padding:3px 10px;border-radius:100px;font-size:11px;font-family:var(--mono);font-weight:500;}
+.bo{background:rgba(245,166,35,.15);color:var(--accent);border:1px solid rgba(245,166,35,.3);}
+.bb{background:rgba(0,212,255,.12);color:var(--accent2);border:1px solid rgba(0,212,255,.25);}
+.bg{background:rgba(46,204,113,.12);color:var(--success);border:1px solid rgba(46,204,113,.3);}
+.br{background:rgba(231,76,60,.12);color:var(--danger);border:1px solid rgba(231,76,60,.3);}
+.bw{background:rgba(243,156,18,.12);color:var(--warn);border:1px solid rgba(243,156,18,.3);}
+
+/* ── Shell ── */
+.shell{display:flex;flex:1;height:calc(100vh - 56px);overflow:hidden;}
+
+/* ── Sidebar ── */
+.sidebar{width:224px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:16px 0;overflow-y:auto;}
+.nav-section{padding:0 8px 16px;}
+.nav-label{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);padding:0 8px 6px;font-weight:600;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:7px;cursor:pointer;font-size:13px;color:var(--muted);transition:all .15s;margin-bottom:2px;user-select:none;}
+.nav-item:hover:not(.locked){background:var(--card);color:var(--text);}
+.nav-item.active{background:rgba(245,166,35,.12);color:var(--accent);font-weight:500;}
+.nav-item.locked{opacity:.35;cursor:not-allowed;}
+.nav-item .icon{font-size:15px;width:20px;text-align:center;}
+.nav-item .nav-check{margin-left:auto;color:var(--success);opacity:0;font-size:11px;transition:opacity .2s;}
+.nav-item.done .nav-check{opacity:1;}
+.nav-divider{border:none;border-top:1px solid var(--border);margin:8px 16px;}
+
+/* Step progress in sidebar */
+.step-progress{padding:0 16px 16px;display:flex;flex-direction:column;gap:4px;}
+.sp-item{font-family:var(--mono);font-size:10px;color:var(--muted);display:flex;align-items:center;gap:6px;padding:3px 0;}
+.sp-item.done{color:var(--success);}
+.sp-item.active{color:var(--accent);}
+
+/* ── Main ── */
+.main{flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:20px;}
+.panel{display:none;flex-direction:column;gap:16px;}
+.panel.active{display:flex;}
+
+/* ── Cards ── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.card-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+.card-title{font-weight:600;font-size:13px;display:flex;align-items:center;gap:8px;}
+.card-body{padding:16px;}
+
+/* ── Buttons ── */
+.btn{padding:8px 16px;border-radius:7px;border:none;cursor:pointer;font-size:13px;font-weight:500;font-family:var(--sans);transition:all .15s;display:inline-flex;align-items:center;gap:6px;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+.btn-primary{background:var(--accent);color:#111;}.btn-primary:hover:not(:disabled){background:#f0b43a;}
+.btn-secondary{background:var(--border);color:var(--text);}.btn-secondary:hover:not(:disabled){background:#3a4560;}
+.btn-success{background:rgba(46,204,113,.15);color:var(--success);border:1px solid rgba(46,204,113,.3);}.btn-success:hover:not(:disabled){background:rgba(46,204,113,.25);}
+.btn-danger{background:rgba(231,76,60,.15);color:var(--danger);border:1px solid rgba(231,76,60,.3);}.btn-danger:hover:not(:disabled){background:rgba(231,76,60,.25);}
+.btn-warn{background:rgba(243,156,18,.15);color:var(--warn);border:1px solid rgba(243,156,18,.3);}.btn-warn:hover:not(:disabled){background:rgba(243,156,18,.25);}
+.btn-info{background:rgba(0,212,255,.12);color:var(--accent2);border:1px solid rgba(0,212,255,.25);}.btn-info:hover:not(:disabled){background:rgba(0,212,255,.2);}
+.btn-sm{padding:5px 10px;font-size:12px;}
+.btn-xs{padding:3px 8px;font-size:11px;border-radius:5px;}
+
+/* ── Form ── */
+.fg{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;}
+.fg-group{display:flex;flex-direction:column;gap:5px;}
+.fg-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);}
+.fc{background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;font-family:var(--sans);transition:border-color .15s;width:100%;}
+.fc:focus{outline:none;border-color:var(--accent);}
+select.fc option{background:var(--surface);}
+.fc-mono{font-family:var(--mono);font-size:12px;}
+.input-with-btn{display:flex;gap:6px;}
+.input-with-btn .fc{flex:1;}
+.pick-btn{background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;padding:0 12px;font-size:15px;transition:color .15s,border-color .15s;white-space:nowrap;flex-shrink:0;}
+.pick-btn:hover{color:var(--accent);border-color:var(--accent);}
+
+/* ── Radio output mode ── */
+.radio-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.radio-card{display:flex;align-items:flex-start;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;cursor:pointer;transition:border-color .15s,background .15s;}
+.radio-card:hover{border-color:var(--muted);}
+.radio-card.selected{border-color:var(--accent);background:rgba(245,166,35,.06);}
+.radio-card input[type=radio]{accent-color:var(--accent);margin-top:2px;flex-shrink:0;}
+.radio-info strong{display:block;font-size:13px;color:var(--text);margin-bottom:2px;}
+.radio-info code{font-family:var(--mono);font-size:10px;color:var(--muted);}
+
+/* ── Checkboxes ── */
+.chk-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.chk-item{display:flex;align-items:flex-start;gap:10px;}
+.chk-item input[type=checkbox]{accent-color:var(--accent);margin-top:3px;flex-shrink:0;}
+.chk-label strong{display:block;font-size:13px;}
+.chk-label span{font-family:var(--mono);font-size:10px;color:var(--muted);}
+
+/* ── Alert ── */
+.alert{padding:12px 16px;border-radius:8px;font-size:13px;display:flex;align-items:flex-start;gap:10px;line-height:1.6;}
+.ai{background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.2);color:var(--accent2);}
+.as{background:rgba(46,204,113,.08);border:1px solid rgba(46,204,113,.2);color:var(--success);}
+.aw{background:rgba(245,166,35,.08);border:1px solid rgba(245,166,35,.2);color:var(--accent);}
+.ae{background:rgba(231,76,60,.08);border:1px solid rgba(231,76,60,.2);color:var(--danger);}
+
+/* ── Tables ── */
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;}
+th{background:var(--surface);padding:9px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap;}
+td{padding:7px 10px;border-bottom:1px solid rgba(42,51,72,.5);color:var(--text);vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:rgba(255,255,255,.015);}
+.tbl-wrap{overflow-x:auto;overflow-y:auto;max-height:320px;}
+
+/* ── Stat row ── */
+.stat-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;}
+.stat-box{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;}
+.stat-val{font-family:var(--mono);font-size:22px;font-weight:600;margin-bottom:3px;}
+.stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;}
+
+/* ── Progress ── */
+.prog-wrap{display:flex;flex-direction:column;gap:6px;}
+.prog-row{display:flex;justify-content:space-between;align-items:baseline;}
+.prog-files{font-family:var(--mono);font-size:11px;color:var(--muted);}
+.prog-pct{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--accent);}
+.prog-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;}
+.prog-fill{height:100%;background:var(--accent);border-radius:3px;width:0;transition:width .3s;}
+
+/* ── Log ── */
+.log-box{background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.log-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:7px 14px;display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.log-bar-title{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;margin-right:4px;}
+.flt-btn{background:transparent;border:1px solid transparent;border-radius:4px;color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:10px;padding:3px 8px;transition:all .15s;}
+.flt-btn:hover{color:var(--text);}
+.flt-btn.on{background:var(--accent);color:#111;border-color:var(--accent);}
+.log-clr{margin-left:auto;background:transparent;border:none;color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:10px;padding:3px 6px;}
+.log-clr:hover{color:var(--text);}
+.log-body{overflow-y:auto;padding:4px 0;font-family:var(--mono);font-size:11px;line-height:1.7;max-height:180px;}
+#meta-tables-wrap{overflow-y:auto;max-height:360px;}
+#meta-tables-wrap .meta-type-header{padding:8px 16px 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;border-top:1px solid var(--border);}
+#meta-tables-wrap .meta-type-header:first-child{border-top:none;}
+#meta-tables-wrap table{width:100%;border-collapse:collapse;font-size:12px;}
+#meta-tables-wrap table th,#meta-tables-wrap table td{padding:6px 10px;border-bottom:1px solid var(--border);white-space:nowrap;text-align:right;}
+#meta-tables-wrap table thead th{background:var(--surface2);font-weight:600;position:sticky;top:0;z-index:1;}
+#meta-tables-wrap table tbody tr:hover{background:var(--surface2);}
+#meta-tables-wrap table td:first-child,#meta-tables-wrap table th:first-child{font-weight:600;background:var(--surface2);position:sticky;right:0;}
+.log-line{display:flex;gap:10px;padding:1px 14px;}
+.log-line:hover{background:var(--surface);}
+.ll-time{color:var(--muted);flex-shrink:0;width:60px;}
+.ll-badge{flex-shrink:0;width:50px;font-weight:600;}
+.ll-badge.ok{color:var(--success);}
+.ll-badge.empty{color:var(--warn);}
+.ll-badge.error{color:var(--danger);}
+.ll-badge.info{color:var(--accent2);}
+.ll-badge.done{color:var(--accent);}
+.ll-msg{color:var(--text);flex:1;}
+.ll-cnt{color:var(--muted);flex-shrink:0;}
+
+/* ── Flex helpers ── */
+.flex-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.spacer{flex:1;}
+
+/* ── Color helpers ── */
+.text-acc{color:var(--accent);}
+.text-blue{color:var(--accent2);}
+.text-green{color:var(--success);}
+.text-red{color:var(--danger);}
+.text-warn{color:var(--warn);}
+.text-muted{color:var(--muted);}
+.text-mono{font-family:var(--mono);}
+
+/* ── Map ── */
+.map-wrap{border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--map-bg);}
+#shp-map-plot{width:100%;height:calc(100vh - 260px);min-height:400px;}
+#panel-map-leaflet{width:100%;height:calc(100vh - 260px);min-height:400px;display:none;border-radius:8px;}
+
+/* ── Map toolbar ── */
+.map-mode-btn{background:transparent;border:1px solid var(--border);border-radius:5px;color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:11px;padding:4px 10px;transition:all .15s;}
+.map-mode-btn.on{background:var(--accent);color:#111;border-color:var(--accent);}
+.map-mode-btn:hover:not(.on){color:var(--text);border-color:var(--muted);}
+
+/* ── Basemap selector ── */
+.basemap-strip{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 16px;background:var(--card);border:1px solid var(--border);border-radius:8px;}
+.basemap-btn{padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:11px;font-family:var(--mono);cursor:pointer;transition:all .15s;}
+.basemap-btn:hover{border-color:var(--accent);color:var(--text);}
+.basemap-btn.active{background:var(--accent);color:#111;border-color:var(--accent);font-weight:700;}
+.lf-tooltip{background:#1c2333 !important;border:1px solid #2a3348 !important;color:#d0d8f0 !important;font-family:'IBM Plex Mono',monospace !important;font-size:11px !important;padding:6px 10px !important;border-radius:6px !important;box-shadow:0 4px 16px rgba(0,0,0,.5) !important;}
+.leaflet-tooltip.lf-tooltip::before{display:none !important;}
+.leaflet-popup-content-wrapper{background:#1c2333 !important;border:1px solid #2a3348 !important;color:#d0d8f0 !important;border-radius:8px !important;box-shadow:0 6px 24px rgba(0,0,0,.6) !important;}
+.leaflet-popup-tip{background:#1c2333 !important;}
+.leaflet-popup-content{margin:10px 14px !important;}
+.leaflet-popup-close-button{color:#d0d8f0 !important;}
+
+/* ── ETA countdown clock ── */
+.eta-wrap{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.25);}
+.eta-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;animation:etapulse 1s infinite;}
+.eta-label{color:var(--muted);}
+.eta-val{color:var(--accent);font-weight:600;letter-spacing:.5px;min-width:36px;}
+@keyframes etapulse{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* ── File table select bar ── */
+.sel-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border);}
+.sel-count{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:auto;}
+
+/* ── scrollbar ── */
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:10px;}
+::-webkit-scrollbar-thumb:hover{background:var(--muted);}
+
+  footer{background:var(--surface);border-top:1px solid var(--border);padding:8px 24px;font-size:11px;color:var(--muted);display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);}
+
+/* ── Session ── */
+.modal-overlay{position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;}
+.modal-box{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;width:440px;display:flex;flex-direction:column;gap:16px;box-shadow:0 16px 48px rgba(0,0,0,.5);}
+.session-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:100px;font-size:11px;font-family:var(--mono);font-weight:500;background:rgba(139,92,246,.15);color:#a78bfa;border:1px solid rgba(139,92,246,.3);max-width:220px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.session-chip .sc-x{cursor:pointer;opacity:.5;font-size:10px;transition:opacity .15s;flex-shrink:0;padding:0 0 0 2px;}
+.session-chip .sc-x:hover{opacity:1;}
+
+/* ── SHP Map Dashboard ── */
+.shpmap-main{display:flex;gap:12px;align-items:flex-start;}
+.shpmap-map-wrap{flex:1;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--map-bg);height:calc(100vh - 360px);min-height:420px;}
+#shpmap-leaflet{width:100%;height:100%;border-radius:8px;}
+.shpmap-filter{width:272px;flex-shrink:0;display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 360px);overflow-y:auto;}
+.ftab-bar{display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap;}
+.ftab{padding:5px 10px;border-radius:6px;border:1px solid var(--border);cursor:pointer;font-size:11px;font-family:var(--mono);background:var(--surface);color:var(--muted);transition:all .15s;}
+.ftab:hover{color:var(--text);border-color:var(--muted);}
+.ftab.active{background:var(--accent);color:#111;border-color:var(--accent);}
+.ftab-content{display:none;flex-direction:column;gap:8px;}
+.ftab-content.active{display:flex;}
+.result-chip{display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:5px;font-family:var(--mono);font-size:11px;background:var(--surface);border:1px solid var(--border);color:var(--muted);}
+.result-chip.match{border-color:rgba(46,204,113,.4);background:rgba(46,204,113,.07);color:var(--success);}
+#shpmap-basemap-strip .basemap-btn.active{background:var(--accent);color:#111;border-color:var(--accent);font-weight:700;}
+
+/* ── SHP Metadata table ── */
+#sm-meta-table-card{margin-top:0;}
+#sm-meta-table-wrap{overflow-x:auto;overflow-y:auto;max-height:340px;}
+#sm-meta-table th{background:var(--surface2);position:sticky;top:0;z-index:1;white-space:nowrap;}
+#sm-meta-table td{white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis;}
+.sm-meta-tr{cursor:pointer;transition:background .1s;}
+.sm-meta-tr:hover{background:rgba(99,102,241,.18) !important;}
+.sm-meta-tr.sm-focused{background:rgba(99,102,241,.28) !important;outline:1px solid var(--accent);}
+.sm-meta-tr td:first-child{font-weight:600;background:var(--surface2);position:sticky;right:0;}
+.sm-meta-tr:hover td:first-child{background:rgba(99,102,241,.18);}
+.sm-meta-tr.sm-focused td:first-child{background:rgba(99,102,241,.28);}
+
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="logo">
+    <svg width="36" height="36" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">
+      <defs>
+        <linearGradient id="hL1" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#f5a623"/><stop offset="100%" stop-color="#ffd080"/></linearGradient>
+        <linearGradient id="hL2" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#00d4ff" stop-opacity=".7"/><stop offset="100%" stop-color="#00d4ff" stop-opacity=".15"/></linearGradient>
+        <filter id="hGlow"><feGaussianBlur stdDeviation="1.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <polygon points="10,58 62,46 62,56 10,66" fill="#f5a62318" stroke="#f5a62332" stroke-width="1.2"/>
+      <polygon points="6,40 62,26 62,38 6,52" fill="#00d4ff06" stroke="url(#hL2)" stroke-width="1.5"/>
+      <polygon points="2,24 62,8 62,22 2,38" fill="#f5a62305" stroke="url(#hL1)" stroke-width="2.5" filter="url(#hGlow)"/>
+      <circle cx="2" cy="24" r="5" fill="url(#hL1)"/>
+      <circle cx="2" cy="24" r="11" fill="#f5a62316"/>
+    </svg>
+    <div>
+      <div class="logo-text" style="font-size:16px;letter-spacing:.5px;">GIS</div>
+      <div class="logo-sub">Geographic Intelligence System</div>
+    </div>
+  </div>
+  <div class="hbadges">
+    <span class="badge bb" id="hdr-files">0 Files</span>
+    <span class="badge bo" id="hdr-polys">0 Polygons</span>
+    <span class="badge" id="hdr-status-badge" style="background:rgba(90,100,128,.15);color:var(--muted);border:1px solid rgba(90,100,128,.3)">IDLE</span>
+    <span id="hdr-session-chip" class="session-chip" style="display:none;" title="">💾 <span id="hdr-session-name" style="overflow:hidden;text-overflow:ellipsis;"></span><span class="sc-x" onclick="clearSession()" title="נקה">✕</span></span>
+    <button class="btn btn-secondary btn-sm" onclick="doLoadSession()" style="font-size:11px;padding:4px 12px;">📂 טען עבודה</button>
+  </div>
+</header>
+
+<div class="shell">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="nav-section">
+      <div class="nav-label">Pipeline</div>
+      <div class="nav-item active" id="nav-1" onclick="goPanel(1)">
+        <span class="icon">📐</span>שלב 1 — DWG → DXF
+        <span class="nav-check">✓</span>
+      </div>
+      <div class="nav-item locked" id="nav-2" onclick="goPanel(2)">
+        <span class="icon">🔍</span>שלב 2 — חילוץ שכבה
+        <span class="nav-check">✓</span>
+      </div>
+      <div class="nav-item locked" id="nav-map" onclick="goPanel('map')">
+        <span class="icon">🗺️</span>מפה אינטראקטיבית
+        <span class="nav-check">✓</span>
+      </div>
+      <div class="nav-item locked" id="nav-3" onclick="goPanel(3)">
+        <span class="icon">📦</span>שלב 3 — ייצוא
+        <span class="nav-check">✓</span>
+      </div>
+      <div class="nav-item" id="nav-shpmap" onclick="goPanel('shpmap')">
+        <span class="icon">📂</span>דשבורד מפה SHP
+        <span class="nav-check">✓</span>
+      </div>
+    </div>
+    <hr class="nav-divider">
+    <div class="nav-section">
+      <div class="nav-label">נתוני אימון</div>
+      <div class="nav-item" id="nav-data" onclick="goPanel('data')">
+        <span class="icon">📊</span>שלב 4 — נתוני אימון
+        <span class="nav-check">✓</span>
+      </div>
+      <div class="nav-item" id="nav-predict" onclick="goPanel('predict')">
+        <span class="icon">🔮</span>חיזוי רווחיות
+        <span class="nav-check">✓</span>
+      </div>
+    </div>
+    <hr class="nav-divider">
+    <div class="nav-section">
+      <div class="nav-label">Information</div>
+      <div class="nav-item" style="cursor:default;font-size:11px;">
+        <span class="icon">🖥</span>localhost:7654
+      </div>
+    </div>
+    <div style="flex:1"></div>
+    <div class="step-progress" id="stepProgress">
+      <div class="sp-item" id="sp1"><span>⬜</span>1. DWG → DXF</div>
+      <div class="sp-item" id="sp2"><span>⬜</span>2. חילוץ שכבה</div>
+      <div class="sp-item" id="sp3"><span>⬜</span>3. ייצוא</div>
+      <div class="sp-item" id="sp-map"><span>⬜</span>מפה</div>
+      <div class="sp-item" id="sp-shpmap"><span>🟩</span>דשבורד SHP</div>
+      <div class="sp-item" id="sp-data"><span>🟩</span>נתוני אימון</div>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- ══ PANEL 1 — שלב 1: הגדרות + DWG → DXF ══ -->
+    <div class="panel active" id="panel-1">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <h2 style="font-size:18px;font-weight:600;">שלב 1 — סריקה והמרת DWG → DXF</h2>
+          <p style="color:var(--muted);font-size:13px;margin-top:3px;">הגדר תיקיות ונתיב ODA, סרוק קבצי DWG והמר לפורמט DXF</p>
+        </div>
+        <span id="p2-found-badge" class="badge bb"></span>
+      </div>
+
+      <!-- תיקיות -->
+      <div class="card">
+        <div class="card-head"><span class="card-title">📁 תיקיות</span></div>
+        <div class="card-body">
+          <div class="fg" style="grid-template-columns:1fr 1fr;">
+            <div class="fg-group">
+              <div class="fg-label">תיקיית קלט (DWG)</div>
+              <div class="input-with-btn">
+                <label for="input-dir"></label><input class="fc fc-mono" id="input-dir" type="text" placeholder="C:\maps\dwg_files">
+                <button class="pick-btn" onclick="pickFolder('input-dir')">📁</button>
+              </div>
+            </div>
+            <div class="fg-group">
+              <div class="fg-label">תיקיית יעד (DXF זמניים + תוצרים)</div>
+              <div class="input-with-btn">
+                <label for="output-dir"></label><input class="fc fc-mono" id="output-dir" type="text" placeholder="C:\maps\output">
+                <button class="pick-btn" onclick="pickFolder('output-dir')">📁</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ODA + אפשרויות סריקה -->
+      <div class="card">
+        <div class="card-head"><span class="card-title">⚙️ הגדרות ODA וסריקה</span></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:14px;">
+          <div class="fg-group">
+            <div class="fg-label">נתיב ODA File Converter (נדרש להמרת DWG)</div>
+            <label for="oda-path"></label><input class="fc fc-mono" id="oda-path" type="text" placeholder="C:\Program Files\ODA\ODAFileConverter\ODAFileConverter.exe">
+          </div>
+          <div class="chk-grid">
+            <div class="chk-item">
+              <label for="recursive"></label><input type="checkbox" id="recursive" checked>
+              <div class="chk-label">
+                <strong>סריקה רקורסיבית</strong>
+                <span>חיפוש בכל תתי-התיקיות</span>
+              </div>
+            </div>
+            <div class="chk-item">
+              <label for="only-rz"></label><input type="checkbox" id="only-rz">
+              <div class="chk-label">
+                <strong>קבצי RZ בלבד</strong>
+                <span>סנן רק קבצים עם "RZ" בשם</span>
+              </div>
+            </div>
+            <div class="chk-item">
+              <label for="only-tzr"></label><input type="checkbox" id="only-tzr">
+              <div class="chk-label">
+                <strong>קבצי תצ"ר בלבד</strong>
+                <span>סנן רק קבצים בפורמט מספר-שנה (למשל 1204-2025)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="scan-alert" style="display:none"></div>
+
+      <div class="flex-row">
+        <button class="btn btn-primary" id="btn-scan" onclick="doScan()">🔍 סרוק קבצי DWG</button>
+        <span id="scan-badge"></span>
+        <div class="spacer"></div>
+      </div>
+
+      <!-- file list (shown after scan) -->
+      <div class="card" id="p1-file-card" style="display:none;">
+        <div class="card-head">
+          <span class="card-title">📐 קבצי DWG שנמצאו</span>
+          <div class="flex-row" style="gap:6px;">
+            <label for="filter-files"></label><input class="fc" id="filter-files" placeholder="חיפוש שם קובץ…" oninput="filterTable()" style="width:180px;font-size:12px;padding:5px 8px;">
+          </div>
+        </div>
+        <div class="sel-bar">
+          <button class="btn btn-secondary btn-sm" onclick="selAll(true)">✓ בחר הכל</button>
+          <button class="btn btn-secondary btn-sm" onclick="selAll(false)">✗ בטל הכל</button>
+          <span class="sel-count" id="sel-count">0 נבחרו</span>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:36px"><label for="chk-all"></label><input type="checkbox" id="chk-all" onchange="selAll(this.checked)" style="accent-color:var(--accent)"></th>
+                <th>שם קובץ</th>
+                <th>נתיב יחסי</th>
+                <th>גודל</th>
+                <th>תאריך שינוי</th>
+              </tr>
+            </thead>
+            <tbody id="file-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- step 1 progress -->
+      <div id="p2-progress" style="display:none;flex-direction:column;gap:16px;">
+        <div class="card">
+          <div class="card-head"><span class="card-title">🔄 מתבצעת המרה DWG → DXF…</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="eta-wrap" id="s1-eta" style="display:none"><span class="eta-dot"></span><span class="eta-label">עוד</span><span class="eta-val" id="s1-eta-val">—</span></span>
+              <span id="s1-rate" class="badge bw"></span>
+            </div>
+          </div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
+            <div class="prog-wrap">
+              <div class="prog-row">
+                <span class="prog-files" id="p2-prog-files">0 / 0 קבצים</span>
+                <span class="prog-pct"   id="p2-prog-pct">0%</span>
+              </div>
+              <div class="prog-bar"><div class="prog-fill" id="p2-prog-fill"></div></div>
+            </div>
+            <div class="stat-row">
+              <div class="stat-box"><div class="stat-val" id="s1-total">—</div><div class="stat-label">סה״כ</div></div>
+              <div class="stat-box"><div class="stat-val text-green" id="s1-ok">—</div><div class="stat-label">הצלחה</div></div>
+              <div class="stat-box"><div class="stat-val text-red" id="s1-errors">—</div><div class="stat-label">שגיאות</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="log-box">
+          <div class="log-bar">
+            <span class="log-bar-title">LOG</span>
+            <button class="flt-btn on" data-f="all"   onclick="setFlt(this,'log-body-1')">הכל</button>
+            <button class="flt-btn"    data-f="ok"    onclick="setFlt(this,'log-body-1')">OK</button>
+            <button class="flt-btn"    data-f="error" onclick="setFlt(this,'log-body-1')">ERROR</button>
+            <button class="log-clr" onclick="clearLogBox('log-body-1')">נקה</button>
+          </div>
+          <div class="log-body" id="log-body-1"></div>
+        </div>
+      </div>
+
+      <div class="flex-row" id="p1-step1-btns" style="display:none;">
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="btn-step1" onclick="doStep1()">▶ המר DWG → DXF</button>
+        <button class="btn btn-success" id="btn-to-step2" style="display:none" onclick="goPanel(2)">המשך לשלב 2 →</button>
+      </div>
+    </div><!-- /panel-1 -->
+
+    <!-- ══ PANEL 2 — שלב 2: בחירת שכבה + חילוץ לזיכרון + מפה ══ -->
+    <div class="panel" id="panel-2">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <h2 style="font-size:18px;font-weight:600;">שלב 2 — בחירת שכבה וחילוץ לזיכרון</h2>
+          <p style="color:var(--muted);font-size:13px;margin-top:3px;">טען שכבות מקבצי DXF, בחר שכבה אחת, וחלץ את הגיאומטריות לזיכרון</p>
+        </div>
+        <span id="p3-found-badge" class="badge bb"></span>
+      </div>
+
+      <!-- layers card -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">📊 בחירת שכבה</span>
+          <span id="p2-layer-count" class="badge bb" style="display:none"></span>
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
+          <!-- mode toggle -->
+          <div class="flex-row" style="gap:0;">
+            <button class="map-mode-btn on" id="btn-layer-mode-list"   onclick="setLayerMode('list')"  >📋 מרשימה</button>
+            <button class="map-mode-btn"    id="btn-layer-mode-manual" onclick="setLayerMode('manual')">✏️ הקלד ידנית</button>
+          </div>
+          <!-- list mode -->
+          <div id="layer-mode-list">
+            <div class="flex-row" style="margin-bottom:8px;">
+              <button class="btn btn-info btn-sm" id="btn-load-layers" onclick="loadLayers()">🔍 טען שכבות</button>
+              <span id="p2-layers-status" style="font-family:var(--mono);font-size:11px;color:var(--muted)"></span>
+            </div>
+            <div class="fg-group">
+              <div class="fg-label">בחר שכבה לחילוץ</div>
+              <label for="layer-select"></label><select class="fc fc-mono" id="layer-select" style="max-width:400px;">
+                <option value="">— אוטומטי לפי שם קובץ (RZ→M1200, תצ"ר→C1602_0) —</option>
+              </select>
+            </div>
+          </div>
+          <!-- manual mode -->
+          <div id="layer-mode-manual" style="display:none;">
+            <div class="fg-group">
+              <div class="fg-label">שם שכבה (בדיוק כפי שמופיע בקובץ DXF)</div>
+              <label for="layer-manual"></label><input class="fc fc-mono" id="layer-manual" type="text" placeholder="לדוגמא: M1200 או גבולות" style="max-width:400px;">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- extraction options -->
+      <div class="card">
+        <div class="card-head"><span class="card-title">⚙️ אפשרויות חילוץ</span></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:14px;">
+          <div class="fg-group">
+            <div class="fg-label">דיוק (ספרות אחרי הנקודה)</div>
+            <label for="csv-precision"></label><input class="fc fc-mono" id="csv-precision" type="number" value="3" min="0" max="6" style="width:80px;">
+          </div>
+          <!-- entity type filter -->
+          <div>
+            <div class="fg-label" style="margin-bottom:8px;">סוגי ישויות לחילוץ
+              <button class="btn btn-secondary btn-sm" style="margin-right:8px;" onclick="setAllEntTypes(true)">בחר הכל</button>
+              <button class="btn btn-secondary btn-sm" onclick="setAllEntTypes(false)">נקה הכל</button>
+            </div>
+            <div class="chk-grid">
+              <div class="chk-item"><label for="ent-polygon"></label><input type="checkbox" id="ent-polygon" checked><div class="chk-label"><strong>פוליגונים</strong><span>LWPOLYLINE/POLYLINE סגורים · HATCH · SOLID · 3DFACE</span></div></div>
+              <div class="chk-item"><label for="ent-polyline"></label><input type="checkbox" id="ent-polyline" checked><div class="chk-label"><strong>פוליליינים</strong><span>LWPOLYLINE/POLYLINE פתוחים</span></div></div>
+              <div class="chk-item"><label for="ent-line"></label><input type="checkbox" id="ent-line" checked><div class="chk-label"><strong>קווים ישרים</strong><span>LINE</span></div></div>
+              <div class="chk-item"><label for="ent-point"></label><input type="checkbox" id="ent-point" checked><div class="chk-label"><strong>נקודות</strong><span>POINT</span></div></div>
+              <div class="chk-item"><label for="ent-circle"></label><input type="checkbox" id="ent-circle" checked><div class="chk-label"><strong>עיגולים / אליפסות</strong><span>CIRCLE · ELLIPSE</span></div></div>
+              <div class="chk-item"><label for="ent-arc"></label><input type="checkbox" id="ent-arc" checked><div class="chk-label"><strong>קשתות</strong><span>ARC</span></div></div>
+              <div class="chk-item"><label for="ent-spline"></label><input type="checkbox" id="ent-spline" checked><div class="chk-label"><strong>ספליינים</strong><span>SPLINE</span></div></div>
+              <div class="chk-item"><label for="ent-block"></label><input type="checkbox" id="ent-block" checked><div class="chk-label"><strong>בלוקים</strong><span>INSERT</span></div></div>
+              <div class="chk-item"><label for="ent-text"></label><input type="checkbox" id="ent-text" checked><div class="chk-label"><strong>טקסטים</strong><span>TEXT · MTEXT</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- step 2 progress -->
+      <div id="p3-progress" style="display:none;flex-direction:column;gap:16px;">
+        <div class="card">
+          <div class="card-head"><span class="card-title">🔄 מתבצע חילוץ DXF → זיכרון…</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="eta-wrap" id="s2-eta" style="display:none"><span class="eta-dot"></span><span class="eta-label">עוד</span><span class="eta-val" id="s2-eta-val">—</span></span>
+              <span id="s2-rate" class="badge bw"></span>
+            </div>
+          </div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
+            <div class="prog-wrap">
+              <div class="prog-row">
+                <span class="prog-files" id="p3-prog-files">0 / 0 קבצים</span>
+                <span class="prog-pct"   id="p3-prog-pct">0%</span>
+              </div>
+              <div class="prog-bar"><div class="prog-fill" id="p3-prog-fill"></div></div>
+            </div>
+            <div class="stat-row">
+              <div class="stat-box"><div class="stat-val" id="s2-total">—</div><div class="stat-label">סה״כ קבצים</div></div>
+              <div class="stat-box"><div class="stat-val text-green" id="s2-ok">—</div><div class="stat-label">הצלחה</div></div>
+              <div class="stat-box"><div class="stat-val text-warn" id="s2-empty">—</div><div class="stat-label">ריק</div></div>
+              <div class="stat-box"><div class="stat-val text-red" id="s2-errors">—</div><div class="stat-label">שגיאות</div></div>
+              <div class="stat-box"><div class="stat-val text-acc" id="s2-features">—</div><div class="stat-label">ישויות</div></div>
+              <div class="stat-box"><div class="stat-val" id="s2-rows" style="font-size:13px;">—</div><div class="stat-label">קודקודים</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="log-box">
+          <div class="log-bar">
+            <span class="log-bar-title">LOG</span>
+            <button class="flt-btn on" data-f="all"   onclick="setFlt(this,'log-body-2')">הכל</button>
+            <button class="flt-btn"    data-f="ok"    onclick="setFlt(this,'log-body-2')">OK</button>
+            <button class="flt-btn"    data-f="empty" onclick="setFlt(this,'log-body-2')">EMPTY</button>
+            <button class="flt-btn"    data-f="error" onclick="setFlt(this,'log-body-2')">ERROR</button>
+            <button class="log-clr" onclick="clearLogBox('log-body-2')">נקה</button>
+          </div>
+          <div class="log-body" id="log-body-2"></div>
+        </div>
+      </div>
+
+      <!-- map moved to dedicated panel-map tab -->
+
+      <div class="flex-row">
+        <button class="btn btn-secondary" onclick="goPanel(1)">← חזור לשלב 1</button>
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="btn-step2" onclick="doStep2()">▶ חלץ שכבה לזיכרון</button>
+        <button class="btn btn-success" id="btn-to-export" style="display:none" onclick="goPanel('map')">המשך למפה →</button>
+        <button class="btn btn-warn btn-sm" id="btn-save-session" style="display:none" onclick="showSaveModal()">💾 שמור עבודה</button>
+      </div>
+    </div><!-- /panel-2 -->
+
+    <!-- ══ PANEL 3 — שלב 3: ייצוא ══ -->
+    <div class="panel" id="panel-3">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <h2 style="font-size:18px;font-weight:600;">שלב 3 — ייצוא</h2>
+          <p style="color:var(--muted);font-size:13px;margin-top:3px;">בחר פורמטים ואופן ייצוא — הנתונים ייכתבו לדיסק</p>
+        </div>
+      </div>
+
+      <!-- output dir card -->
+      <div class="card">
+        <div class="card-head"><span class="card-title">📁 תיקיית יעד</span></div>
+        <div class="card-body">
+          <div class="fg-label" style="margin-bottom:4px;">התוצרים יישמרו ב:</div>
+          <div class="fc fc-mono" id="exp-out-dir-display"
+               style="padding:8px 10px;background:var(--surface2);border-radius:6px;font-size:12px;color:var(--muted);">
+            —
+          </div>
+        </div>
+      </div>
+
+      <!-- export formats card -->
+      <div class="card">
+        <div class="card-head"><span class="card-title">📂 פורמטי ייצוא</span></div>
+        <div class="card-body">
+          <table style="width:100%;border-collapse:collapse;">
+            <thead>
+              <tr>
+                <th style="text-align:right;padding:8px 12px;font-size:11px;color:var(--muted);">פורמט</th>
+                <th style="text-align:right;padding:8px 12px;font-size:11px;color:var(--muted);">ייצא?</th>
+                <th style="text-align:right;padding:8px 12px;font-size:11px;color:var(--muted);">אופן</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="padding:10px 12px;font-family:var(--mono);font-weight:600;">CSV</td>
+                <td style="padding:10px 12px;"><input type="checkbox" id="exp-csv" onchange="toggleExpMode('csv')" style="accent-color:var(--accent);width:16px;height:16px;"></td>
+                <td style="padding:10px 12px;" id="exp-csv-mode-cell">
+                  <label style="display:inline-flex;align-items:center;gap:6px;margin-left:16px;cursor:pointer;opacity:.4;">
+                    <input type="radio" name="exp-csv-mode" value="merged" style="accent-color:var(--accent)"> הכל יחד
+                  </label>
+                  <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;opacity:.4;">
+                    <input type="radio" name="exp-csv-mode" value="separate" checked style="accent-color:var(--accent)"> כל מפה בנפרד
+                  </label>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:10px 12px;font-family:var(--mono);font-weight:600;">KML</td>
+                <td style="padding:10px 12px;"><input type="checkbox" id="exp-kml" onchange="toggleExpMode('kml')" style="accent-color:var(--accent);width:16px;height:16px;"></td>
+                <td style="padding:10px 12px;" id="exp-kml-mode-cell">
+                  <label style="display:inline-flex;align-items:center;gap:6px;margin-left:16px;cursor:pointer;opacity:.4;">
+                    <input type="radio" name="exp-kml-mode" value="merged" style="accent-color:var(--accent)"> הכל יחד
+                  </label>
+                  <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;opacity:.4;">
+                    <input type="radio" name="exp-kml-mode" value="separate" checked style="accent-color:var(--accent)"> כל מפה בנפרד
+                  </label>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:10px 12px;font-family:var(--mono);font-weight:600;">SHP</td>
+                <td style="padding:10px 12px;"><input type="checkbox" id="exp-shp" onchange="toggleExpMode('shp')" style="accent-color:var(--accent);width:16px;height:16px;"></td>
+                <td style="padding:10px 12px;" id="exp-shp-mode-cell">
+                  <label style="display:inline-flex;align-items:center;gap:6px;margin-left:16px;cursor:pointer;opacity:.4;">
+                    <input type="radio" name="exp-shp-mode" value="merged" style="accent-color:var(--accent)"> הכל יחד
+                  </label>
+                  <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;opacity:.4;">
+                    <input type="radio" name="exp-shp-mode" value="separate" checked style="accent-color:var(--accent)"> כל מפה בנפרד
+                  </label>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- export progress -->
+      <div id="p3-exp-progress" style="display:none;flex-direction:column;gap:16px;">
+        <div class="card">
+          <div class="card-head"><span class="card-title">🔄 מתבצע ייצוא…</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="eta-wrap" id="s3-eta" style="display:none"><span class="eta-dot"></span><span class="eta-label">עוד</span><span class="eta-val" id="s3-eta-val">—</span></span>
+              <span id="s3-rate" class="badge bw"></span>
+            </div>
+          </div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
+            <div class="prog-wrap">
+              <div class="prog-row">
+                <span class="prog-files" id="p3-exp-prog-files">0 / 0 פורמטים</span>
+                <span class="prog-pct"   id="p3-exp-prog-pct">0%</span>
+              </div>
+              <div class="prog-bar"><div class="prog-fill" id="p3-exp-prog-fill"></div></div>
+            </div>
+            <div class="stat-row">
+              <div class="stat-box"><div class="stat-val" id="s3-total">—</div><div class="stat-label">סה״כ</div></div>
+              <div class="stat-box"><div class="stat-val text-green" id="s3-ok">—</div><div class="stat-label">הצלחה</div></div>
+              <div class="stat-box"><div class="stat-val text-red" id="s3-errors">—</div><div class="stat-label">שגיאות</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="log-box">
+          <div class="log-bar">
+            <span class="log-bar-title">LOG</span>
+            <button class="flt-btn on" data-f="all"   onclick="setFlt(this,'log-body-3')">הכל</button>
+            <button class="flt-btn"    data-f="ok"    onclick="setFlt(this,'log-body-3')">OK</button>
+            <button class="flt-btn"    data-f="error" onclick="setFlt(this,'log-body-3')">ERROR</button>
+            <button class="log-clr" onclick="clearLogBox('log-body-3')">נקה</button>
+          </div>
+          <div class="log-body" id="log-body-3"></div>
+        </div>
+      </div>
+
+      <div id="p3-alert" style="display:none"></div>
+
+      <div class="flex-row">
+        <button class="btn btn-secondary" onclick="goPanel(2)">← חזור לשלב 2</button>
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="btn-export" onclick="doExport()">▶ ייצא</button>
+        <button class="btn btn-success" id="btn-open-exp-folder" style="display:none" onclick="openExpFolder()">📂 פתח תיקיית פלט</button>
+      </div>
+    </div><!-- /panel-3 -->
+
+    <!-- ══ PANEL MAP — מפה אינטראקטיבית (GSI-style) ══ -->
+    <div class="panel" id="panel-map">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <h2 style="font-size:18px;font-weight:600;">🗺️ מפה — תצוגה גיאוגרפית</h2>
+          <p style="color:var(--muted);font-size:13px;margin-top:3px;">גיאומטריות שחולצו ממסמכי DXF · מערכת קואורדינטות: ITM / Israel New Grid</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button class="map-mode-btn on" id="mb-all" onclick="setMapMode('all')">כל הקבצים</button>
+          <button class="map-mode-btn" id="mb-one" onclick="setMapMode('one')">קובץ בודד</button>
+          <label for="map-sel-single"></label>
+          <select class="fc" id="map-sel-single" onchange="setMapMode(S.mapMode)" style="display:none;width:180px;font-size:12px;padding:5px 8px;">
+            <option value="">— בחר —</option>
+          </select>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--muted);">תצוגה:</span>
+          <select class="fc" id="map-view-mode" onchange="switchMapView()" style="width:160px;font-size:12px;padding:5px 8px;">
+            <option value="plotly">📊 Plotly ITM</option>
+            <option value="leaflet" selected>🛰️ Leaflet / Basemap</option>
+          </select>
+          <span id="map-poly-count" class="badge bb" style="display:none"></span>
+        </div>
+      </div>
+
+      <!-- Basemap strip — only when Leaflet active -->
+      <div id="basemapBar" style="display:none">
+        <div class="basemap-strip">
+          <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">🛰️ רקע / Basemap:</span>
+          <button class="basemap-btn" data-bm="none" onclick="setBasemap('none')">ללא</button>
+          <button class="basemap-btn" data-bm="esri-satellite" onclick="setBasemap('esri-satellite')">🛰️ Esri Satellite</button>
+          <button class="basemap-btn" data-bm="esri-topo" onclick="setBasemap('esri-topo')">🗻 Esri Topo</button>
+          <button class="basemap-btn active" data-bm="osm" onclick="setBasemap('osm')">🗺️ OpenStreetMap</button>
+          <button class="basemap-btn" data-bm="carto-dark" onclick="setBasemap('carto-dark')">🌑 Carto Dark</button>
+        </div>
+      </div>
+
+      <!-- Map containers -->
+      <div class="map-wrap">
+        <div id="shp-map-plot"></div>
+        <div id="panel-map-leaflet"></div>
+      </div>
+
+      <!-- Info bar -->
+      <div class="card">
+        <div class="card-body" style="padding:10px 16px;">
+          <div class="flex-row" style="gap:20px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--muted);">
+            <span>📐 Plotly: ציר X = East (מ׳) · ציר Y = North (מ׳)</span>
+            <span>🛰️ Leaflet: המרת ITM → WGS84 אוטומטית עם Helmert 7-param</span>
+            <span>ריחוף על גיאומטריה = שם הקובץ</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- metadata table -->
+      <div id="meta-card" class="card" style="display:none;">
+        <div class="card-head">
+          <span class="card-title">🗂️ מטה-דאטה שחולצה</span>
+          <span id="meta-badge" class="badge bb"></span>
+        </div>
+        <div class="card-body" style="padding:0;">
+          <div id="meta-tables-wrap"></div>
+        </div>
+      </div>
+
+      <!-- survey points card -->
+      <div id="survey-card" class="card" style="display:none;">
+        <div class="card-head">
+          <span class="card-title">📍 נקודות מדידה</span>
+          <span id="survey-badge" class="badge bb"></span>
+        </div>
+        <div id="survey-rows" style="display:flex;flex-wrap:wrap;gap:10px;padding:4px 0;"></div>
+      </div>
+
+      <div class="flex-row">
+        <button class="btn btn-secondary" onclick="goPanel(2)">← חזור לשלב 2</button>
+        <div class="spacer"></div>
+        <button class="btn btn-info" onclick="switchMapView()">🔄 החלף תצוגה</button>
+        <button class="btn btn-success" onclick="goPanel(3)">המשך לייצוא →</button>
+      </div>
+    </div><!-- /panel-map -->
+
+    <!-- ══ PANEL SHP MAP DASHBOARD ══ -->
+    <div class="panel" id="panel-shpmap">
+      <!-- Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <h2 style="font-size:18px;font-weight:600;">📂 דשבורד מפה — טעינת SHP</h2>
+          <p style="color:var(--muted);font-size:13px;margin-top:3px;">טען קבצי SHP מתיקייה, הצג פוליגונים על המפה וסנן לפי מיקום</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button class="map-mode-btn on" id="sm-mb-all" onclick="setSmMapMode('all')">כל הקבצים</button>
+          <button class="map-mode-btn" id="sm-mb-one" onclick="setSmMapMode('one')">קובץ בודד</button>
+          <label for="sm-sel-single"></label>
+          <select class="fc" id="sm-sel-single" onchange="setSmMapMode('one')" style="display:none;width:200px;font-size:12px;padding:5px 8px;">
+            <option value="">— בחר מפה —</option>
+          </select>
+          <select class="fc" id="shpmap-coord-sys" style="width:190px;font-size:12px;padding:5px 8px;" onchange="updateSmCoordLabels()">
+            <option value="itm">קואורדינטות קבצי SHP: ITM</option>
+            <option value="wgs84">קואורדינטות קבצי SHP: WGS84</option>
+          </select>
+          <span id="shpmap-count-badge" class="badge bb" style="display:none;"></span>
+        </div>
+      </div>
+
+      <!-- Folder loader -->
+      <div class="card">
+        <div class="card-body" style="padding:12px 16px;">
+          <div class="flex-row" style="align-items:flex-end;flex-wrap:wrap;gap:10px;">
+            <div class="fg-group" style="flex:1;min-width:220px;">
+              <label class="fg-label">תיקיית SHP</label>
+              <div class="input-with-btn">
+                <input class="fc fc-mono" id="shpmap-dir" placeholder="C:\path\to\shp_folder" />
+                <button class="pick-btn" onclick="browseShpmap()" title="בחר תיקייה">📁</button>
+              </div>
+            </div>
+            <button class="btn btn-primary" onclick="loadShpmapDir()" style="flex-shrink:0;margin-bottom:1px;">⬇ טען SHP</button>
+            <button class="btn btn-secondary" onclick="clearShpmapData()" style="flex-shrink:0;margin-bottom:1px;">🗑 נקה</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+            <input type="checkbox" id="shpmap-recursive" checked style="cursor:pointer;">
+            <label for="shpmap-recursive" style="font-size:12px;color:var(--muted);cursor:pointer;">סריקה רקורסיבית — חיפוש בכל תתי-התיקיות</label>
+          </div>
+          <div id="shpmap-load-msg" style="display:none;margin-top:8px;"></div>
+        </div>
+      </div>
+
+      <!-- Basemap strip -->
+      <div class="basemap-strip" id="shpmap-basemap-strip">
+        <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">🛰️ רקע:</span>
+        <button class="basemap-btn" data-smbm="none" onclick="setShpmapBasemap('none')">ללא</button>
+        <button class="basemap-btn active" data-smbm="esri-satellite" onclick="setShpmapBasemap('esri-satellite')">🛰️ Esri Satellite</button>
+        <button class="basemap-btn" data-smbm="esri-topo" onclick="setShpmapBasemap('esri-topo')">🗻 Esri Topo</button>
+        <button class="basemap-btn" data-smbm="osm" onclick="setShpmapBasemap('osm')">🗺️ OpenStreetMap</button>
+        <button class="basemap-btn" data-smbm="carto-dark" onclick="setShpmapBasemap('carto-dark')">🌑 Carto Dark</button>
+      </div>
+
+      <!-- Draw toolbar strip -->
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:8px;flex-wrap:wrap;">
+        <span style="font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0;">✏️ ציור:</span>
+        <button id="sm-fab-draw" onclick="toggleSmDrawPoly()"
+          style="background:#f5a623;color:#111;border:none;border-radius:6px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans);">
+          ✏️ צייר פוליגון
+        </button>
+        <button onclick="clearSmDrawPoly()"
+          style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:var(--sans);">
+          🗑 נקה
+        </button>
+        <button id="sm-fab-apply" onclick="applySmPolyFilter()"
+          style="display:none;background:#2ecc71;color:#111;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--sans);">
+          🔍 חפש לפי פוליגון
+        </button>
+        <span id="sm-fab-status" style="font-family:var(--mono);font-size:11px;color:var(--accent2);display:none;"></span>
+      </div>
+
+      <!-- Map + Filter row -->
+      <div class="shpmap-main">
+        <!-- Leaflet map -->
+        <div class="shpmap-map-wrap">
+          <div id="shpmap-leaflet"></div>
+        </div>
+
+        <!-- Filter panel -->
+        <div class="shpmap-filter">
+          <!-- Search card -->
+          <div class="card">
+            <div class="card-head" style="padding:10px 14px;">
+              <div class="card-title" style="font-size:12px;">🔍 חיפוש פוליגונים</div>
+            </div>
+            <div class="card-body" style="padding:12px;display:flex;flex-direction:column;gap:8px;">
+              <!-- Tab bar -->
+              <div class="ftab-bar">
+                <button class="ftab active" id="ftab-coord" onclick="setSmFilterTab('coord')">נ״צ + רדיוס</button>
+                <button class="ftab" id="ftab-poly" onclick="setSmFilterTab('poly')">פוליגון</button>
+                <button class="ftab" id="ftab-place" onclick="setSmFilterTab('place')">ישוב</button>
+                <button class="ftab" id="ftab-text" onclick="setSmFilterTab('text')">חיפוש חופשי</button>
+              </div>
+
+              <!-- Tab 1: Coordinates + Radius -->
+              <div class="ftab-content active" id="ftab-content-coord">
+                <div class="fg-group">
+                  <label class="fg-label">מערכת נ״צ</label>
+                  <select class="fc" id="sm-coord-sys" onchange="updateSmCoordLabels()">
+                    <option value="wgs84">WGS84 (lat / lon)</option>
+                    <option value="itm">ITM (East / North מ׳)</option>
+                  </select>
+                </div>
+                <div class="fg-group">
+                  <label class="fg-label" id="sm-coord-label-1">קו רוחב (lat)</label>
+                  <input class="fc fc-mono" id="sm-coord-lat" placeholder="31.7845" />
+                </div>
+                <div class="fg-group">
+                  <label class="fg-label" id="sm-coord-label-2">קו אורך (lon)</label>
+                  <input class="fc fc-mono" id="sm-coord-lon" placeholder="34.9876" />
+                </div>
+                <div class="fg-group">
+                  <label class="fg-label">רדיוס (מטרים)</label>
+                  <input class="fc fc-mono" id="sm-coord-radius" type="number" value="1000" min="1" />
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="applySmRadiusFilter()">🔍 חפש</button>
+              </div>
+
+              <!-- Tab 2: Draw polygon -->
+              <div class="ftab-content" id="ftab-content-poly">
+                <div class="alert ai" style="font-size:11px;padding:8px 10px;line-height:1.5;">לחץ על המפה להוספת נקודות לפוליגון הסינון.<br>לחץ פעמיים לסגירת הפוליגון.</div>
+                <div id="sm-poly-status" style="font-family:var(--mono);font-size:11px;color:var(--muted);min-height:16px;"></div>
+                <div class="flex-row" style="gap:6px;">
+                  <button class="btn btn-warn btn-sm" id="sm-btn-draw" onclick="toggleSmDrawPoly()">✏️ צייר</button>
+                  <button class="btn btn-secondary btn-sm" onclick="clearSmDrawPoly()">🗑 נקה</button>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="applySmPolyFilter()">🔍 חפש לפי פוליגון</button>
+              </div>
+
+              <!-- Tab 3: Settlement + radius -->
+              <div class="ftab-content" id="ftab-content-place">
+                <div class="fg-group">
+                  <label class="fg-label">שם ישוב / עיר</label>
+                  <input class="fc" id="sm-place-name" placeholder="תל אביב, חיפה..." onkeydown="if(event.key==='Enter')applySmPlaceFilter()" />
+                </div>
+                <div class="fg-group">
+                  <label class="fg-label">רדיוס ממרכז (מטרים)</label>
+                  <input class="fc fc-mono" id="sm-place-radius" type="number" value="2000" min="1" />
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="applySmPlaceFilter()">🔍 חפש לפי ישוב</button>
+                <div id="sm-place-status" style="font-family:var(--mono);font-size:11px;color:var(--muted);min-height:16px;word-break:break-word;line-height:1.4;"></div>
+              </div>
+
+              <!-- Tab 4: Free text search -->
+              <div class="ftab-content" id="ftab-content-text">
+                <div class="fg-group">
+                  <label class="fg-label">חיפוש בכל שדות המטא-דאטה</label>
+                  <input class="fc" id="sm-text-query" placeholder="הזן טקסט לחיפוש..." oninput="smTextSearchDebounced()" />
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="applySmTextSearch()">🔍 חפש</button>
+                <button class="btn btn-secondary btn-sm" onclick="clearSmTextSearch()">✕ נקה חיפוש</button>
+                <div id="sm-text-status" style="font-family:var(--mono);font-size:11px;color:var(--muted);min-height:16px;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Results card -->
+          <div class="card" id="sm-results-card" style="display:none;">
+            <div class="card-head" style="padding:10px 14px;">
+              <div class="card-title" id="sm-results-title" style="font-size:12px;">תוצאות</div>
+              <button class="btn btn-xs btn-secondary" onclick="clearSmFilter()">נקה סינון</button>
+            </div>
+            <div id="sm-results-body" style="padding:10px 12px;font-family:var(--mono);font-size:11px;max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:3px;"></div>
+          </div>
+        </div><!-- /filter -->
+      </div><!-- /shpmap-main -->
+
+      <!-- Metadata table -->
+      <div class="card" id="sm-meta-table-card" style="display:none;">
+        <div class="card-head">
+          <span class="card-title">📋 מטה-דאטה — כל הפיצ'רים</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input class="fc fc-mono" id="sm-meta-search" placeholder="סנן טבלה..." oninput="filterSmMetaTable()" style="width:200px;font-size:11px;padding:4px 8px;" />
+            <span id="sm-meta-count" class="badge bb"></span>
+          </div>
+        </div>
+        <div id="sm-meta-table-wrap">
+          <table id="sm-meta-table">
+            <thead id="sm-meta-thead"></thead>
+            <tbody id="sm-meta-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Bottom bar -->
+      <div class="flex-row">
+        <span style="font-family:var(--mono);font-size:11px;color:var(--muted);">🛰️ המרת ITM → WGS84 אוטומטית · ריחוף על שורה בטבלה = מרכוז המפה · לחיצה כפולה לסיום ציור פוליגון</span>
+      </div>
+    </div><!-- /panel-shpmap -->
+
+    <!-- ════════ PANEL 4 — TRAINING DATA ════════ -->
+    <div class="panel" id="panel-data">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div>
+          <h2 style="font-size:18px;font-weight:600;">📊 שלב 4 — נתוני אימון</h2>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;">בנייה של מאגר פרויקטים לאימון מודל החיזוי. כל מפה = רשומה אחת בקובץ ה-CSV.</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-secondary btn-sm" onclick="dataLoadFromState()">🔄 טען מהמפות שעובדו</button>
+          <button class="btn btn-info btn-sm" onclick="dataImportCSV()">📥 ייבוא CSV (מזג)</button>
+          <button class="btn btn-warn btn-sm" onclick="dataImportCSVReplace()" title="מוחק את כל הנתונים הקיימים ומחליף בקובץ החדש">🔄 ייבוא CSV (איפוס)</button>
+          <button class="btn btn-secondary btn-sm" onclick="dataRefreshCalc()" title="מחיל עלות לשעה מברירת המחדל על כל השורות, ומחשב מחדש מרחק מהמשרד">📐 עדכן חישובים</button>
+          <button class="btn btn-primary btn-sm" onclick="dataExportCSV()">💾 ייצוא CSV</button>
+          <button class="btn btn-warn btn-sm" onclick="prTrainModel()" id="btn-train-model">⚙️ אמן מחדש</button>
+          <button class="btn btn-danger btn-sm" onclick="dataClearAll()">🗑 נקה הכל</button>
+          <span id="pr-loading" style="display:none;color:var(--muted);font-size:12px;font-family:var(--mono);"></span>
+          <input type="file" id="dt-csv-input" accept=".csv" style="display:none">
+          <input type="file" id="dt-csv-replace-input" accept=".csv" style="display:none">
+        </div>
+      </div>
+
+      <!-- הגדרות גלובליות -->
+      <div class="card">
+        <div class="card-head"><span class="card-title">⚙️ הגדרות גלובליות</span></div>
+        <div class="card-body">
+          <div class="fg">
+            <div class="fg-group">
+              <label class="fg-label">מיקום המשרד — קו רוחב (lat)</label>
+              <input class="fc fc-mono" id="dt-office-lat" type="number" step="0.000001" value="32.6082952">
+            </div>
+            <div class="fg-group">
+              <label class="fg-label">מיקום המשרד — קו אורך (lon)</label>
+              <input class="fc fc-mono" id="dt-office-lon" type="number" step="0.000001" value="35.2887911">
+            </div>
+            <div class="fg-group">
+              <label class="fg-label">עלות שעת עבודה ברירת מחדל (₪)</label>
+              <input class="fc fc-mono" id="dt-hourly-cost" type="number" step="1" value="180" oninput="dataApplyDefaultCost()">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- טבלת רשומות -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">📋 רשומות פרויקטים <span id="dt-row-count" class="badge bb" style="margin-right:8px;">0</span></span>
+          <button class="btn btn-info btn-xs" onclick="dataAddBlankRow()">➕ הוסף שורה ריקה</button>
+        </div>
+        <div class="card-body" style="padding:0;">
+          <div style="overflow-x:auto;max-height:calc(100vh - 400px);overflow-y:auto;">
+            <table id="dt-table" style="width:100%;border-collapse:collapse;font-size:12px;font-family:var(--mono);">
+              <thead style="position:sticky;top:0;background:var(--surface);z-index:5;">
+                <tr style="border-bottom:1px solid var(--border);">
+                  <th style="padding:8px;text-align:center;width:32px;"></th>
+                  <th style="padding:8px;text-align:right;min-width:110px;">project_id</th>
+                  <th style="padding:8px;text-align:right;min-width:160px;">project_name</th>
+                  <th style="padding:8px;text-align:right;min-width:70px;background:rgba(0,212,255,.06);" title="מחושב אוטומטית">🤖 map_type</th>
+                  <th style="padding:8px;text-align:right;min-width:110px;">survey_type</th>
+                  <th style="padding:8px;text-align:right;min-width:90px;">site_type</th>
+                  <th style="padding:8px;text-align:right;min-width:130px;">client_name</th>
+                  <th style="padding:8px;text-align:right;min-width:90px;">city</th>
+                  <th style="padding:8px;text-align:right;min-width:70px;">gush</th>
+                  <th style="padding:8px;text-align:right;min-width:60px;">helka</th>
+                  <th style="padding:8px;text-align:right;min-width:130px;">survey_date</th>
+                  <th style="padding:8px;text-align:right;min-width:130px;">finish_date</th>
+                  <th style="padding:8px;text-align:right;min-width:90px;background:rgba(0,212,255,.06);" title="מחושב אוטומטית מפוליגון">🤖 area_sqm</th>
+                  <th style="padding:8px;text-align:right;min-width:100px;background:rgba(0,212,255,.06);" title="שטח רשמי מה-DXF">🤖 official_area</th>
+                  <th style="padding:8px;text-align:right;min-width:95px;background:rgba(0,212,255,.06);" title="מחושב אוטומטית">🤖 perimeter_m</th>
+                  <th style="padding:8px;text-align:right;min-width:85px;background:rgba(0,212,255,.06);" title="perimeter²/(4π·area)">🤖 shape_index</th>
+                  <th style="padding:8px;text-align:right;min-width:90px;background:rgba(0,212,255,.06);" title="מחושב אוטומטית">🤖 center_lat</th>
+                  <th style="padding:8px;text-align:right;min-width:90px;background:rgba(0,212,255,.06);" title="מחושב אוטומטית">🤖 center_lon</th>
+                  <th style="padding:8px;text-align:right;min-width:100px;background:rgba(0,212,255,.06);" title="מרחק קווי-אווירי מהמשרד">🤖 distance_km</th>
+                  <th style="padding:8px;text-align:right;min-width:80px;background:rgba(0,212,255,.06);" title="נקודות מדידה מה-DXF">🤖 surv_pts</th>
+                  <th style="padding:8px;text-align:right;min-width:100px;background:rgba(245,166,35,.06);">💰 quoted_price</th>
+                  <th style="padding:8px;text-align:right;min-width:90px;background:rgba(245,166,35,.06);">💰 actual_hours</th>
+                  <th style="padding:8px;text-align:right;min-width:90px;background:rgba(245,166,35,.06);">💰 hourly_cost</th>
+                  <th style="padding:8px;text-align:right;min-width:90px;background:rgba(46,204,113,.06);" title="quoted − (actual×cost)">📊 profit</th>
+                  <th style="padding:8px;text-align:right;min-width:85px;background:rgba(46,204,113,.06);" title="profit/quoted×100">📊 margin %</th>
+                  <th style="padding:8px;text-align:right;min-width:110px;">status</th>
+                  <th style="padding:8px;text-align:right;min-width:100px;">is_accepted</th>
+                </tr>
+              </thead>
+              <tbody id="dt-tbody"></tbody>
+            </table>
+            <div id="dt-empty" style="padding:40px;text-align:center;color:var(--muted);">
+              אין נתונים. לחץ "טען מהמפות שעובדו" לאחר שלב 1–2, או הוסף שורה ריקה ידנית.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- מקרא -->
+      <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--muted);padding:0 4px;">
+        <span>🤖 = מחושב אוטומטית מהשרת (read-only)</span>
+        <span>💰 = מילוי ידני — קריטי לרווחיות</span>
+        <span>📊 = מחושב מ-quoted/actual/cost</span>
+        <span id="dt-save-indicator" style="margin-right:auto;color:var(--success);display:none;">✓ נשמר</span>
+      </div>
+    </div><!-- /panel-data -->
+
+    <!-- ══ PANEL PREDICT — חיזוי רווחיות ══ -->
+    <div class="panel" id="panel-predict">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div>
+          <h2 style="font-size:18px;font-weight:600;">🔮 חיזוי רווחיות פרויקט</h2>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;">הזן פרמטרי פרויקט וקבל תחזית רווחיות מבוססת היסטוריה</div>
+        </div>
+        <div id="pr-model-badge" style="display:flex;gap:8px;align-items:center;"></div>
+      </div>
+
+      <!-- hidden fields — מאוכלסים אוטומטית מהפוליגון -->
+      <input type="hidden" id="pr-area">
+      <input type="hidden" id="pr-pts">
+      <input type="hidden" id="pr-dist">
+      <input type="hidden" id="pr-shape">
+
+      <!-- Zone A — תחום מדידה -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">📐 תחום מדידה</span>
+          <div style="display:flex;gap:6px;">
+            <button class="map-mode-btn on" id="pr-tab-draw" onclick="prSetTab('draw')">✏ ציור על מפה</button>
+            <button class="map-mode-btn"    id="pr-tab-dwg"  onclick="prSetTab('dwg')">📁 קובץ DWG</button>
+          </div>
+        </div>
+
+        <!-- Tab: ציור -->
+        <div id="pr-zone-draw">
+          <!-- Draw toolbar -->
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+            <button id="pr-btn-draw" onclick="prToggleDraw()"
+              style="background:#f5a623;color:#111;border:none;border-radius:6px;padding:7px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans);">
+              ✏️ צייר פוליגון
+            </button>
+            <button onclick="prClearDraw()"
+              style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:7px 12px;font-size:12px;cursor:pointer;font-family:var(--sans);">
+              🗑 נקה
+            </button>
+            <span id="pr-draw-status" style="font-family:var(--mono);font-size:11px;color:var(--accent2);"></span>
+            <span style="margin-right:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span style="font-family:var(--mono);font-size:11px;color:var(--muted);">🛰️ רקע:</span>
+              <button class="basemap-btn" data-prbm="none"           onclick="setPrBasemap('none')">ללא</button>
+              <button class="basemap-btn" data-prbm="esri-satellite" onclick="setPrBasemap('esri-satellite')">🛰️ Satellite</button>
+              <button class="basemap-btn" data-prbm="esri-topo"      onclick="setPrBasemap('esri-topo')">🗻 Topo</button>
+              <button class="basemap-btn active" data-prbm="osm"     onclick="setPrBasemap('osm')">🗺️ OSM</button>
+              <button class="basemap-btn" data-prbm="carto-dark"     onclick="setPrBasemap('carto-dark')">🌑 Dark</button>
+            </span>
+          </div>
+          <div id="pr-map" style="height:300px;"></div>
+        </div>
+
+        <!-- Tab: DWG -->
+        <div id="pr-zone-dwg" style="display:none;padding:16px;">
+          <div class="fg-group" style="margin-bottom:10px;">
+            <label class="fg-label">נתיב קובץ DWG (שכבת M1200 / C1602_0)</label>
+            <div class="input-with-btn">
+              <input class="fc fc-mono" id="pr-dwg-path" type="text" placeholder="C:\maps\project.dwg">
+              <button class="pick-btn" onclick="pickFolder('pr-dwg-path')">📁</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn btn-info btn-sm" onclick="prExtractFromDwg()">⚡ חלץ פוליגון</button>
+            <span id="pr-dwg-loading" style="display:none;font-size:11px;color:var(--muted);font-family:var(--mono);">ממיר DWG...</span>
+          </div>
+        </div>
+
+        <!-- auto-calculated stats -->
+        <div id="pr-geo-stats" style="display:none;padding:10px 16px;border-top:1px solid var(--border);background:rgba(0,212,255,.04);">
+          <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;font-family:var(--mono);color:var(--accent2);">
+            <span>🤖 שטח: <strong id="pr-stat-area">—</strong></span>
+            <span>היקף: <strong id="pr-stat-perim">—</strong></span>
+            <span>מדד צורה: <strong id="pr-stat-shape">—</strong></span>
+            <span>מרחק מהמשרד: <strong id="pr-stat-dist">—</strong></span>
+            <span title="שערוך גולמי לפי נוסחה: שטח × מקדם מפה × מקדם שטח">📐 נוסחה: <strong id="pr-stat-pts-raw" style="color:#f5a623;">—</strong></span>
+            <span title="חיזוי מבוסס למידה מנתונים היסטוריים">🤖 ML: <strong id="pr-stat-pts-ml">—</strong></span>
+          </div>
+        </div>
+
+        <!-- manual inputs -->
+        <div class="card-body" style="border-top:1px solid var(--border);">
+          <div class="fg" style="grid-template-columns:repeat(auto-fill,minmax(170px,1fr));">
+            <div class="fg-group">
+              <label class="fg-label">סוג מדידה</label>
+              <select class="fc" id="pr-maptype" onchange="prReCalcIfPoly()">
+                <option value="RZ">RZ — רישום זכויות</option>
+                <option value="TZR">TZR — תצ"ר</option>
+                <option value="other">אחר</option>
+              </select>
+            </div>
+            <div class="fg-group">
+              <label class="fg-label">קושי שטח</label>
+              <select class="fc" id="pr-terrain" onchange="prReCalcIfPoly()">
+                <option value="open">פתוח</option>
+                <option value="mixed" selected>משולב</option>
+                <option value="built">בנוי</option>
+              </select>
+            </div>
+            <div class="fg-group">
+              <label class="fg-label">הצעת מחיר (₪)</label>
+              <input class="fc fc-mono" id="pr-price" type="number" min="0" step="1000" placeholder="50000">
+            </div>
+          </div>
+          <div style="margin-top:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <button class="btn btn-primary" id="pr-run-btn" onclick="runPrediction()" disabled>🔮 חזה רווחיות</button>
+            <span id="pr-predict-loading" style="display:none;color:var(--muted);font-size:12px;font-family:var(--mono);">מחשב...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Zone B — Verdict (hidden until result arrives) -->
+      <div id="pr-verdict-zone" style="display:none;">
+        <div class="card" id="pr-verdict-card">
+          <div class="card-body" style="padding:20px 24px;">
+            <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+              <!-- Verdict icon + text -->
+              <div style="flex:0 0 auto;text-align:center;">
+                <div id="pr-verdict-icon"  style="font-size:48px;line-height:1;">⬜</div>
+                <div id="pr-verdict-label" style="font-size:14px;font-weight:700;margin-top:6px;letter-spacing:.5px;"></div>
+              </div>
+              <!-- Gauge bar -->
+              <div style="flex:1;min-width:220px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+                  <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;">שולי רווח צפויים</span>
+                  <span id="pr-margin-val" style="font-family:var(--mono);font-size:18px;font-weight:700;"></span>
+                </div>
+                <div style="height:10px;background:var(--border);border-radius:5px;overflow:hidden;position:relative;">
+                  <div id="pr-gauge-fill" style="height:100%;border-radius:5px;width:0;transition:width .6s ease;"></div>
+                  <!-- threshold line at 20% -->
+                  <div style="position:absolute;top:0;left:20%;width:2px;height:100%;background:rgba(255,255,255,.25);"></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:10px;color:var(--muted);font-family:var(--mono);">
+                  <span>0%</span><span>20% ← סף</span><span>50%+</span>
+                </div>
+              </div>
+              <!-- Stats -->
+              <div style="flex:0 0 auto;display:flex;flex-direction:column;gap:8px;">
+                <div class="stat-box" style="min-width:130px;">
+                  <div class="stat-label">הכנסה צפויה</div>
+                  <div id="pr-stat-revenue" class="stat-val text-green" style="font-size:17px;"></div>
+                </div>
+                <div class="stat-box" style="min-width:130px;">
+                  <div class="stat-label">עלות צפויה</div>
+                  <div id="pr-stat-cost"    class="stat-val text-red"   style="font-size:17px;"></div>
+                </div>
+                <div class="stat-box" style="min-width:130px;">
+                  <div class="stat-label">רווח צפוי</div>
+                  <div id="pr-stat-profit"  class="stat-val"             style="font-size:17px;"></div>
+                </div>
+                <div class="stat-box" style="min-width:130px;">
+                  <div class="stat-label">מחיר מומלץ</div>
+                  <div id="pr-stat-recommended" class="stat-val" style="font-size:17px;color:var(--accent);"></div>
+                  <div id="pr-stat-recommended-detail" style="font-size:10px;color:var(--muted);margin-top:2px;"></div>
+                </div>
+                <div class="stat-box" style="min-width:130px;">
+                  <div class="stat-label">שעות בפועל</div>
+                  <div id="pr-stat-hours" class="stat-val" style="font-size:17px;"></div>
+                  <div id="pr-stat-hours-detail" style="font-size:10px;color:var(--muted);margin-top:2px;"></div>
+                </div>
+              </div>
+            </div>
+            <!-- Confidence -->
+            <div style="margin-top:12px;font-size:12px;color:var(--muted);">
+              ביטחון המודל: <span id="pr-confidence" style="font-family:var(--mono);color:var(--text);font-weight:600;"></span>
+              &nbsp;·&nbsp; אומן על <span id="pr-n-train" style="font-family:var(--mono);"></span> פרויקטים
+              &nbsp;·&nbsp; דיוק CV: <span id="pr-cv-acc"  style="font-family:var(--mono);"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Zone C — Charts + Similar projects (two columns) -->
+      <div id="pr-charts-zone" style="display:none;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <!-- Feature importance -->
+          <div class="card">
+            <div class="card-head"><span class="card-title">📊 גורמים משפיעים</span></div>
+            <div class="card-body" style="padding:8px;">
+              <div id="pr-factors-chart" style="height:240px;"></div>
+            </div>
+          </div>
+          <!-- Cost breakdown -->
+          <div class="card">
+            <div class="card-head"><span class="card-title">💰 פירוט כספי</span></div>
+            <div class="card-body" style="padding:8px;">
+              <div id="pr-breakdown-chart" style="height:240px;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Similar projects table -->
+        <div class="card">
+          <div class="card-head"><span class="card-title">🗂 פרויקטים דומים מההיסטוריה</span></div>
+          <div class="tbl-wrap">
+            <table id="pr-similar-table">
+              <thead>
+                <tr>
+                  <th>שם פרויקט</th>
+                  <th>שטח (מ"ר)</th>
+                  <th>מרחק (ק"מ)</th>
+                  <th>מחיר הצעה (₪)</th>
+                  <th>שולי רווח</th>
+                  <th>סוג</th>
+                  <th>עיר</th>
+                </tr>
+              </thead>
+              <tbody id="pr-similar-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty state / errors -->
+      <div id="pr-error-box" style="display:none;" class="alert ae"></div>
+
+    </div><!-- /panel-predict -->
+
+  </main>
+</div><!-- /shell -->
+<footer>
+  <span>SurveyGIS — פרויקט גמר, גיאודזיה ומיפוי</span>
+  <span>&copy; 2026 בר שפילמן &amp; נעמה הקשר סייג | אוניברסיטת אריאל</span>
+  <span id="footerMsg">מוכן — גרור קובץ DWG להתחלה</span>
+  <span>All processing in-browser · No data sent to server</span>
+</footer>
+
+<script>
+const API = 'http://localhost:7654';
+
+// ── State ────────────────────────────────────────────────────────────────────
+const S = {
+  scannedFiles:    [],   // DWG files from scan
+  dxfFiles:        [],   // DXF files produced by step 1
+  layers:          [],   // layer names loaded from DXF files
+  outputDir:       '',
+  mapMode:         'all',
+  mapData:         null,
+  mapNames:        [],
+  currentStep:     0,    // 1=step1 running, 2=step2 running, 3=export running
+};
+let _jobRunning   = false;
+let _jobStart     = 0;
+let _rateInterval = null;
+let _eventSource  = null;
+const UNLOCKED    = new Set([1, 'shpmap']);
+
+// ── Navigation ───────────────────────────────────────────────────────────────
+function goPanel(n) {
+  if (n !== 'map' && !UNLOCKED.has(n)) return;
+  if (n === 'map' && !UNLOCKED.has('map')) return;
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item[id^=nav-]').forEach(ni => ni.classList.remove('active'));
+  const panelEl = document.getElementById(n === 'map' ? 'panel-map' : 'panel-' + n);
+  const navEl   = document.getElementById('nav-' + n);
+  if (panelEl) panelEl.classList.add('active');
+  if (navEl)   navEl.classList.add('active');
+  if (n === 'map' && S.mapData) {
+    setTimeout(() => { renderShpMap(); if (LMAP_DXF.instance) LMAP_DXF.instance.invalidateSize(); }, 80);
+  }
+  if (n === 'shpmap') {
+    setTimeout(() => { initShpmap(); }, 80);
+  }
+  if (n === 'data') {
+    dataInitLoad();
+  }
+  if (n === 'predict') {
+    predictInitLoad();
+    setTimeout(prInitMap, 120);
+  }
+}
+function unlockPanel(n) {
+  UNLOCKED.add(n);
+  const el = document.getElementById('nav-' + n);
+  if (el) el.classList.remove('locked');
+}
+function markDone(n) {
+  const nav = document.getElementById('nav-' + n);
+  if (nav) nav.classList.add('done');
+  const spId = n === 'map' ? 'sp-map' : n === 'shpmap' ? 'sp-shpmap' : 'sp' + n;
+  const sp = document.getElementById(spId);
+  if (sp) { sp.classList.add('done'); sp.querySelector('span').textContent = '✅'; }
+}
+function markActive(n) {
+  document.querySelectorAll('.sp-item').forEach(s => s.classList.remove('active'));
+  const sp = document.getElementById('sp' + n);
+  if (sp) sp.classList.add('active');
+}
+
+// ── Header badges ────────────────────────────────────────────────────────────
+function setHdrStatus(txt, cls) {
+  const b = document.getElementById('hdr-status-badge');
+  b.textContent = txt;
+  const map = {run:'bw', done:'bg', err:'br', idle:''};
+  b.className = 'badge ' + (map[cls] || '');
+  if (!map[cls]) b.style.cssText = 'background:rgba(90,100,128,.15);color:var(--muted);border:1px solid rgba(90,100,128,.3)';
+  else b.style.cssText = '';
+}
+
+// ── Folder picker ────────────────────────────────────────────────────────────
+async function pickFolder(id) {
+  try {
+    const r = await fetch(API + '/api/browse');
+    const d = await r.json();
+    if (d.path) document.getElementById(id).value = d.path;
+  } catch { alert('לא ניתן לפתוח חלון בחירה — ודא שהשרת פועל'); }
+}
+
+// ── Export format toggle ─────────────────────────────────────────────────────
+function toggleExpMode(fmt) {
+  const chk  = document.getElementById('exp-' + fmt);
+  const cell = document.getElementById('exp-' + fmt + '-mode-cell');
+  if (cell) {
+    cell.querySelectorAll('input[type=radio]').forEach(r => r.disabled = !chk.checked);
+    cell.style.opacity = chk.checked ? '1' : '0.35';
+  }
+}
+
+// ── PANEL 1 — Scan DWG files ─────────────────────────────────────────────────
+async function doScan() {
+  const inputDir  = document.getElementById('input-dir').value.trim();
+  const outputDir = document.getElementById('output-dir').value.trim();
+  if (!inputDir)  { showAlert('scan-alert','ae','יש להגדיר תיקיית קלט'); return; }
+  if (!outputDir) { showAlert('scan-alert','ae','יש להגדיר תיקיית פלט'); return; }
+  document.getElementById('scan-alert').style.display = 'none';
+  S.outputDir = outputDir;
+
+  const btn = document.getElementById('btn-scan');
+  btn.disabled = true; btn.textContent = '⏳ סורק…';
+  try {
+    const res = await fetch(API + '/api/scan', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        input_dir: inputDir, ext: 'dwg',
+        recursive: document.getElementById('recursive').checked,
+        only_rz:   document.getElementById('only-rz').checked,
+        only_tzr:  document.getElementById('only-tzr').checked,
+      })
+    });
+    const d = await res.json();
+    if (d.error) { showAlert('scan-alert','ae',d.error); return; }
+
+    S.scannedFiles = d.files;
+    const skip = d.skipped ? ` · ${d.skipped} סוננו` : '';
+    document.getElementById('scan-badge').innerHTML =
+      `<span class="badge bg">✓ נמצאו ${d.total} קבצי DWG${skip}</span>`;
+    document.getElementById('hdr-files').textContent = d.total + ' קבצים';
+
+    buildFileTable();
+    document.getElementById('p1-file-card').style.display   = '';
+    document.getElementById('p1-step1-btns').style.display  = '';
+    document.getElementById('btn-to-step2').style.display   = 'none'; // hidden until step1 done
+    markActive(1);  // stay in panel 1 — run step 1 first
+  } catch(e) { showAlert('scan-alert','ae','שגיאת תקשורת: ' + e.message); }
+  finally { btn.disabled = false; btn.textContent = '🔍 סרוק קבצי DWG'; }
+}
+
+// ── Panel 2 — File table (DWG list) ─────────────────────────────────────────
+function fmtSize(b) {
+  if (b < 1024)    return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+function fmtDate(ts) {
+  return new Date(ts*1000).toLocaleDateString('he',{day:'2-digit',month:'2-digit',year:'2-digit'});
+}
+
+function buildFileTable() {
+  const tbody = document.getElementById('file-tbody');
+  tbody.innerHTML = '';
+  S.scannedFiles.forEach((f,i) => {
+    const tr = document.createElement('tr');
+    tr.dataset.idx  = i;
+    tr.dataset.name = f.name.toLowerCase();
+    tr.innerHTML = `
+      <td><input type="checkbox" checked data-i="${i}" onchange="updateSelCount()" style="accent-color:var(--accent)"></td>
+      <td class="text-mono">${esc(f.filename)}</td>
+      <td class="text-muted text-mono" style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(f.rel)}">${esc(f.rel)}</td>
+      <td class="text-muted text-mono">${fmtSize(f.size)}</td>
+      <td class="text-muted text-mono">${fmtDate(f.mtime)}</td>`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('p2-found-badge').textContent = S.scannedFiles.length + ' קבצי DWG';
+  updateSelCount();
+}
+
+function filterTable() {
+  const q = document.getElementById('filter-files').value.toLowerCase();
+  document.querySelectorAll('#file-tbody tr').forEach(tr =>
+    tr.style.display = tr.dataset.name.includes(q) ? '' : 'none');
+}
+function selAll(v) {
+  document.querySelectorAll('#file-tbody input[type=checkbox]').forEach(cb => cb.checked = v);
+  document.getElementById('chk-all').checked = v;
+  updateSelCount();
+}
+function updateSelCount() {
+  const n = document.querySelectorAll('#file-tbody input[type=checkbox]:checked').length;
+  document.getElementById('sel-count').textContent = n + ' נבחרו';
+}
+function getSelectedPaths() {
+  const paths = [];
+  document.querySelectorAll('#file-tbody input[type=checkbox]:checked')
+    .forEach(cb => paths.push(S.scannedFiles[parseInt(cb.dataset.i)].path));
+  return paths;
+}
+
+// ── ETA countdown clock ───────────────────────────────────────────────────────
+let _etaInterval = null;
+let _etaRemaining = 0;
+
+function _startEta(etaId) {
+  if (_etaInterval) clearInterval(_etaInterval);
+  const wrap = document.getElementById(etaId);
+  if (wrap) wrap.style.display = 'inline-flex';
+  _etaInterval = setInterval(() => {
+    if (_etaRemaining > 0) _etaRemaining--;
+    const v = document.getElementById(etaId + '-val');
+    if (v) v.textContent = _fmtEta(_etaRemaining);
+  }, 1000);
+}
+
+function _stopEta(etaId) {
+  if (_etaInterval) { clearInterval(_etaInterval); _etaInterval = null; }
+  const wrap = document.getElementById(etaId);
+  if (wrap) wrap.style.display = 'none';
+}
+
+function _updateEta(etaId, processed, total) {
+  if (!processed || !total || processed >= total) return;
+  const elapsed = (Date.now() - _jobStart) / 1000;
+  if (elapsed < 0.5) return;
+  const rate = processed / elapsed;
+  _etaRemaining = Math.max(0, Math.round((total - processed) / rate));
+  const v = document.getElementById(etaId + '-val');
+  if (v) v.textContent = _fmtEta(_etaRemaining);
+}
+
+function _fmtEta(secs) {
+  if (!isFinite(secs) || secs < 0) return '—';
+  const m = Math.floor(secs / 60), s = secs % 60;
+  return (m > 0 ? m + ':' : '') + String(s).padStart(2, '0') + 'ש׳';
+}
+
+// ── Helper: start a job and connect SSE ──────────────────────────────────────
+function _startJobSSE(btnId, onMsg) {
+  _jobRunning = true; _jobStart = Date.now();
+  if (btnId) document.getElementById(btnId).disabled = true;
+  setHdrStatus('RUNNING','run');
+  if (_eventSource) _eventSource.close();
+  _eventSource = new EventSource(API + '/api/stream');
+  _eventSource.onmessage = e => onMsg(JSON.parse(e.data));
+  _eventSource.onerror   = () => { addLogBox('log-body-' + S.currentStep, 'error', 'חיבור לשרת אבד'); _finishJob(btnId); };
+}
+
+function _finishJob(btnId) {
+  _jobRunning = false;
+  clearInterval(_rateInterval);
+  if (_eventSource) { _eventSource.close(); _eventSource = null; }
+  if (btnId) document.getElementById(btnId).disabled = false;
+}
+
+function _updateProg(prefix, processed, total) {
+  const pct = total ? Math.round(processed/total*100) : 0;
+  document.getElementById(prefix+'-prog-fill').style.width  = pct + '%';
+  document.getElementById(prefix+'-prog-pct').textContent   = pct + '%';
+  document.getElementById(prefix+'-prog-files').textContent = `${processed} / ${total} קבצים`;
+}
+
+// ── PANEL 2 — Step 1: DWG → DXF ─────────────────────────────────────────────
+async function doStep1() {
+  const paths = getSelectedPaths();
+  if (!paths.length) { alert('יש לבחור לפחות קובץ DWG אחד'); return; }
+
+  clearLogBox('log-body-1');
+  document.getElementById('s1-total').textContent = '—';
+  document.getElementById('s1-ok').textContent    = '—';
+  document.getElementById('s1-errors').textContent= '—';
+  _updateProg('p2', 0, 0);
+  document.getElementById('p2-progress').style.cssText = 'display:flex;flex-direction:column;gap:16px;';
+  S.currentStep = 1;
+
+  const params = {
+    files: paths,
+    output_dir: S.outputDir,
+    oda_path:   document.getElementById('oda-path').value.trim() || null,
+  };
+
+  try {
+    const res = await fetch(API + '/api/step1', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) { const e = await res.json(); alert('שגיאה: ' + e.error); return; }
+  } catch(e) { alert('לא ניתן להתחבר לשרת: ' + e.message); return; }
+
+  _startJobSSE('btn-step1', d => _handleStep1Msg(d));
+}
+
+function _handleStep1Msg(d) {
+  if (d.type === 'start') {
+    document.getElementById('s1-total').textContent = d.total;
+    addLogBox('log-body-1','info',`מתחיל המרת ${d.total} קבצי DWG → DXF`);
+    _startEta('s1-eta');
+
+  } else if (d.type === 'progress') {
+    _updateProg('p2', d.processed, d.total);
+    document.getElementById('s1-ok').textContent     = d.ok;
+    document.getElementById('s1-errors').textContent = d.errors;
+    const sec = (Date.now()-_jobStart)/1000;
+    if (sec>0) document.getElementById('s1-rate').textContent = (d.processed/sec).toFixed(1)+' קב׳/ש';
+    _updateEta('s1-eta', d.processed, d.total);
+    if (d.status==='ok') addLogBox('log-body-1','ok', d.file);
+    else addLogBox('log-body-1','error', `${d.file} — ${d.error}`);
+
+  } else if (d.type === 'done') {
+    _updateProg('p2', d.total, d.total);
+    _stopEta('s1-eta');
+    addLogBox('log-body-1','done', `הושלם — ${d.ok} DXF נוצרו, ${d.errors} שגיאות`);
+    setHdrStatus('DONE','done');
+    S.dxfFiles = d.output_files || [];
+    unlockPanel(2); markDone(1); markActive(2);
+    document.getElementById('btn-to-step2').style.display = 'inline-flex';
+    setTimeout(() => goPanel(2), 400);
+
+  } else if (d.type === 'error') {
+    _stopEta('s1-eta');
+    addLogBox('log-body-1','error', d.message||'שגיאה'); setHdrStatus('ERROR','err');
+
+  } else if (d.type === 'done_thread') {
+    _finishJob('btn-step1');
+    if (document.getElementById('hdr-status-badge').textContent==='RUNNING') setHdrStatus('IDLE','idle');
+  }
+}
+
+// ── PANEL 2 — Layer mode + Entity type helpers ────────────────────────────────
+const GEOM_CATEGORIES = {
+  'polygon':  ['Polygon'],
+  'polyline': ['Polyline'],
+  'line':     ['Line'],
+  'point':    ['Point'],
+  'circle':   ['Circle_Center','Circle_Vertex','Ellipse'],
+  'arc':      ['Arc'],
+  'spline':   ['Spline'],
+  'block':    ['Block'],
+  'text':     ['Text'],
+};
+
+function setLayerMode(mode) {
+  document.getElementById('layer-mode-list').style.display   = mode==='list'   ? '' : 'none';
+  document.getElementById('layer-mode-manual').style.display = mode==='manual' ? '' : 'none';
+  document.getElementById('btn-layer-mode-list').classList.toggle('on',   mode==='list');
+  document.getElementById('btn-layer-mode-manual').classList.toggle('on', mode==='manual');
+}
+
+function getLayerValue() {
+  const manualDiv = document.getElementById('layer-mode-manual');
+  if (manualDiv.style.display !== 'none') {
+    return document.getElementById('layer-manual').value.trim();
+  }
+  return document.getElementById('layer-select').value;
+}
+
+function setAllEntTypes(v) {
+  Object.keys(GEOM_CATEGORIES).forEach(k => {
+    const el = document.getElementById('ent-' + k);
+    if (el) el.checked = v;
+  });
+}
+
+function getSelectedGeomTypes() {
+  const types = [];
+  for (const [k, vals] of Object.entries(GEOM_CATEGORIES)) {
+    if (document.getElementById('ent-' + k)?.checked) types.push(...vals);
+  }
+  return types;
+}
+
+// ── PANEL 2 — Step 2: Load layers + Parse DXF to memory ──────────────────────
+async function loadLayers() {
+  if (!S.outputDir) { alert('יש לסרוק תיקייה תחילה (שלב 1)'); return; }
+  const btn = document.getElementById('btn-load-layers');
+  btn.disabled = true; btn.textContent = '⏳ טוען…';
+  try {
+    const r = await fetch(API + '/api/layers?dir=' + encodeURIComponent(S.outputDir));
+    const d = await r.json();
+    if (d.error) { alert('שגיאה: ' + d.error); return; }
+    S.layers = d.layers || [];
+    const sel = document.getElementById('layer-select');
+    sel.innerHTML = '<option value="">— אוטומטי לפי שם קובץ (RZ→M1200, תצ"ר→C1602_0) —</option>' +
+      S.layers.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
+    document.getElementById('p2-layer-count').textContent =
+      S.layers.length + ' שכבות ב-' + (d.dxf_count||0) + ' קבצים';
+    document.getElementById('p2-layer-count').style.display = 'inline';
+
+    // זיהוי סוג מפה לפי שכבות
+  } catch(e) { alert('שגיאה בטעינת שכבות: ' + e.message); }
+  finally { btn.disabled = false; btn.textContent = '🔍 טען שכבות'; }
+}
+
+async function doStep2() {
+  const layer = getLayerValue();
+  if (!S.dxfFiles.length) { alert('אין קבצי DXF — הרץ קודם את שלב 1'); return; }
+
+  const geomTypes = getSelectedGeomTypes();
+  if (!geomTypes.length) { alert('יש לבחור לפחות סוג ישות אחד לחילוץ'); return; }
+
+  clearLogBox('log-body-2');
+  ['s2-total','s2-ok','s2-empty','s2-errors','s2-features','s2-rows'].forEach(id =>
+    document.getElementById(id).textContent = '—');
+  _updateProg('p3', 0, 0);
+  document.getElementById('p3-progress').style.cssText = 'display:flex;flex-direction:column;gap:16px;';
+  document.getElementById('btn-to-export').style.display = 'none';
+  S.currentStep = 2;
+
+  const params = {
+    files:          S.dxfFiles,
+    layer:          layer || null,
+    geometry_types: geomTypes,
+  };
+
+  try {
+    const res = await fetch(API + '/api/step2', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) { const e = await res.json(); alert('שגיאה: ' + e.error); return; }
+  } catch(e) { alert('לא ניתן להתחבר לשרת: ' + e.message); return; }
+
+  _startJobSSE('btn-step2', d => _handleStep2Msg(d));
+}
+
+function _handleStep2Msg(d) {
+  if (d.type === 'start') {
+    document.getElementById('s2-total').textContent = d.total;
+    addLogBox('log-body-2','info',`מתחיל חילוץ ${d.total} קבצי DXF לזיכרון`);
+    _startEta('s2-eta');
+
+  } else if (d.type === 'progress') {
+    _updateProg('p3', d.processed, d.total);
+    document.getElementById('s2-ok').textContent       = d.ok;
+    document.getElementById('s2-empty').textContent    = d.empty;
+    document.getElementById('s2-errors').textContent   = d.errors;
+    document.getElementById('s2-features').textContent = (d.total_features||0).toLocaleString();
+    document.getElementById('s2-rows').textContent     = (d.total_rows||0).toLocaleString();
+    const sec = (Date.now()-_jobStart)/1000;
+    if (sec>0) document.getElementById('s2-rate').textContent = (d.processed/sec).toFixed(1)+' קב׳/ש';
+    _updateEta('s2-eta', d.processed, d.total);
+    if      (d.status==='ok')    addLogBox('log-body-2','ok',    `${d.file} — ${(d.features||0)} ישויות · ${(d.count||0).toLocaleString()} קודקודים`);
+    else if (d.status==='empty') addLogBox('log-body-2','empty', `${d.file} — ${d.error}`);
+    else                         addLogBox('log-body-2','error', `${d.file} — ${d.error}`);
+
+  } else if (d.type === 'done') {
+    _updateProg('p3', d.total, d.total);
+    _stopEta('s2-eta');
+    addLogBox('log-body-2','done',
+      `הושלם — ${d.ok} קבצים · ${(d.total_features||0).toLocaleString()} ישויות · ${(d.total_rows||0).toLocaleString()} קודקודים · ${d.errors} שגיאות`);
+    document.getElementById('s2-features').textContent = (d.total_features||0).toLocaleString();
+    document.getElementById('hdr-polys').textContent = (d.total_features||0).toLocaleString() + ' ישויות';
+    setHdrStatus('DONE','done');
+    unlockPanel(3); markDone(2); markActive(3);
+    document.getElementById('btn-to-export').style.display = 'inline-flex';
+    document.getElementById('btn-save-session').style.display = 'inline-flex';
+    document.getElementById('exp-out-dir-display').textContent = S.outputDir || '—';
+    _loadParsedMap();
+
+  } else if (d.type === 'error') {
+    _stopEta('s2-eta');
+    addLogBox('log-body-2','error', d.message||'שגיאה'); setHdrStatus('ERROR','err');
+
+  } else if (d.type === 'done_thread') {
+    _finishJob('btn-step2');
+    if (document.getElementById('hdr-status-badge').textContent==='RUNNING') setHdrStatus('IDLE','idle');
+  }
+}
+
+async function _loadParsedMap() {
+  try {
+    const r = await fetch(API + '/api/parsed-geojson');
+    const d = await r.json();
+    S.mapData  = d.maps  || {};
+    S.mapNames = d.names || [];
+    console.debug('[map] geom_types in cache:', d.geom_summary || '—');
+    console.debug('[map] polygon count per file:', Object.fromEntries(
+      Object.entries(S.mapData).map(([k,v]) => [k, v.length])));
+    const sel = document.getElementById('map-sel-single');
+    sel.innerHTML = '<option value="">— בחר —</option>' +
+      S.mapNames.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    unlockPanel('map');
+    markDone('map');
+    if (!Object.keys(S.mapData).length) {
+      addLogBox('log-body-2', 'error',
+        'אזהרה: אין פוליגונים להצגה — ייתכן שהשכבה הנבחרת אינה מכילה פוליגונים סגורים. בדוק Console לפרטים.');
+    }
+    _loadMetadata();
+    document.getElementById('map-view-mode').value = 'leaflet';
+    setTimeout(() => { goPanel('map'); switchMapView(); }, 300);
+  } catch(e) { console.error('map error', e); }
+}
+
+async function _loadMetadata() {
+  try {
+    const r = await fetch(API + '/api/metadata');
+    const d = await r.json();
+    const meta   = d.metadata || {};
+    const survey = d.survey   || {};
+    const maps   = Object.keys(meta);
+    const card  = document.getElementById('meta-card');
+    const wrap  = document.getElementById('meta-tables-wrap');
+    const badge = document.getElementById('meta-badge');
+
+    // ── metadata table(s) — מפוצל לפי סוג מפה ──
+    if (maps.length) {
+      function _metaMapType(mapName) {
+        const cached = survey[mapName];
+        if (cached && (cached.map_type === 'RZ' || cached.map_type === 'TZR')) return cached.map_type;
+        return 'other';
+      }
+      const groups = { RZ: [], TZR: [], other: [] };
+      maps.forEach(m => groups[_metaMapType(m)].push(m));
+      const typeLabels = { RZ: 'מפות להיתר', TZR: 'תצ"ר', other: 'כללי' };
+      const typeColors = { RZ: 'var(--accent)', TZR: 'var(--accent2)', other: 'var(--muted)' };
+      const activeGroups = [['RZ','RZ'],['TZR','TZR'],['other','other']].filter(([t]) => groups[t].length);
+      const hasMultipleTypes = activeGroups.length > 1;
+      let totalFields = 0;
+      let html = '';
+      activeGroups.forEach(([type]) => {
+        const typeMaps = groups[type];
+        const allFields = [...new Set(typeMaps.flatMap(m => Object.keys(meta[m])))].sort();
+        totalFields += allFields.length;
+        const isMulti = typeMaps.length > 1;
+        if (hasMultipleTypes) {
+          html += `<div class="meta-type-header" style="color:${typeColors[type]}">${typeLabels[type]} — ${typeMaps.length} מפות</div>`;
+        }
+        html += '<div style="overflow-x:auto;"><table><thead><tr>';
+        if (isMulti) html += '<th>מפה</th>';
+        allFields.forEach(f => { html += `<th>${esc(f)}</th>`; });
+        html += '</tr></thead><tbody>';
+        typeMaps.forEach(mapName => {
+          html += '<tr>';
+          if (isMulti) html += `<td>${esc(mapName)}</td>`;
+          allFields.forEach(f => {
+            const v = meta[mapName][f] ?? '—';
+            html += `<td>${esc(String(v))}</td>`;
+          });
+          html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+      });
+      wrap.innerHTML = html;
+      badge.textContent = maps.length + ' מפות, ' + totalFields + ' שדות';
+      card.style.display = 'block';
+    } else {
+      card.style.display = 'none';
+    }
+
+    // ── survey points card ──
+    const surveyCard  = document.getElementById('survey-card');
+    const surveyBadge = document.getElementById('survey-badge');
+    const surveyRows  = document.getElementById('survey-rows');
+    const surveyMaps  = Object.keys(survey);
+    if (surveyMaps.length) {
+      const totalPts = surveyMaps.reduce((s, m) => s + (survey[m].count || 0), 0);
+      surveyBadge.textContent = 'סה"כ ' + totalPts.toLocaleString() + ' נקודות';
+      let chips = '';
+      surveyMaps.forEach(mapName => {
+        const s = survey[mapName];
+        const typeLabel = s.map_type === 'TZR' ? 'תצ"ר' : s.map_type === 'RZ' ? 'מפה להיתר' : s.map_type;
+        chips += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;min-width:160px;">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:2px;">${esc(mapName)}</div>
+          <div style="font-size:22px;font-weight:700;color:var(--accent);line-height:1.1;">${s.count.toLocaleString()}</div>
+          <div style="font-size:11px;color:var(--muted);">${esc(typeLabel)}</div>
+        </div>`;
+      });
+      surveyRows.innerHTML = chips;
+      surveyCard.style.display = 'block';
+    } else {
+      surveyCard.style.display = 'none';
+    }
+  } catch(e) { console.error('metadata error', e); }
+}
+
+// ── PANEL 3 — Export ─────────────────────────────────────────────────────────
+async function doExport() {
+  const outDir = S.outputDir;
+  if (!outDir) { showAlert('p3-alert','ae','יש להגדיר תיקיית יעד בשלב 1'); return; }
+
+  const exports = [];
+  ['csv','kml','shp'].forEach(fmt => {
+    const chk = document.getElementById('exp-' + fmt);
+    if (chk && chk.checked) {
+      const modeEl = document.querySelector(`input[name=exp-${fmt}-mode]:checked`);
+      exports.push({ format: fmt, mode: modeEl ? modeEl.value : 'separate' });
+    }
+  });
+  if (!exports.length) { showAlert('p3-alert','ae','יש לבחור לפחות פורמט אחד'); return; }
+
+  clearLogBox('log-body-3');
+  ['s3-total','s3-ok','s3-errors'].forEach(id =>
+    document.getElementById(id).textContent = '—');
+  _updateProg('p3-exp', 0, 0);
+  document.getElementById('p3-exp-progress').style.cssText = 'display:flex;flex-direction:column;gap:16px;';
+  document.getElementById('p3-alert').style.display = 'none';
+  document.getElementById('btn-open-exp-folder').style.display = 'none';
+  S.currentStep = 3;
+
+  try {
+    const res = await fetch(API + '/api/export', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ output_dir: outDir, exports }),
+    });
+    if (!res.ok) { const e = await res.json(); alert('שגיאה: ' + e.error); return; }
+  } catch(e) { alert('לא ניתן להתחבר לשרת: ' + e.message); return; }
+
+  _startJobSSE('btn-export', d => _handleExportMsg(d));
+}
+
+function _handleExportMsg(d) {
+  if (d.type === 'start') {
+    document.getElementById('s3-total').textContent = d.total;
+    addLogBox('log-body-3','info',`מתחיל ייצוא ${d.total} פורמטים`);
+    _startEta('s3-eta');
+
+  } else if (d.type === 'progress') {
+    _updateProg('p3-exp', d.processed, d.total);
+    document.getElementById('s3-ok').textContent     = d.ok;
+    document.getElementById('s3-errors').textContent = d.errors;
+    const sec = (Date.now()-_jobStart)/1000;
+    if (sec>0) document.getElementById('s3-rate').textContent = (d.processed/sec).toFixed(1)+' פ׳/ש';
+    _updateEta('s3-eta', d.processed, d.total);
+    if (d.status==='ok') addLogBox('log-body-3','ok',  `${d.label} — ${d.count} פריטים`);
+    else                 addLogBox('log-body-3','error',`${d.label} — ${d.error}`);
+
+  } else if (d.type === 'done') {
+    _updateProg('p3-exp', d.total, d.total);
+    _stopEta('s3-eta');
+    addLogBox('log-body-3','done', `הושלם — ${d.ok}/${d.total} פורמטים · ${d.errors} שגיאות`);
+    setHdrStatus('DONE','done');
+    markDone(3);
+    showAlert('p3-alert', d.errors>0?'aw':'as',
+      `${d.errors>0?'⚠️':'✅'} ייצוא הושלם — ${d.ok}/${d.total} פורמטים`);
+    document.getElementById('btn-open-exp-folder').style.display = 'inline-flex';
+
+  } else if (d.type === 'error') {
+    _stopEta('s3-eta');
+    showAlert('p3-alert','ae', d.message||'שגיאה'); setHdrStatus('ERROR','err');
+
+  } else if (d.type === 'done_thread') {
+    _finishJob('btn-export');
+    if (document.getElementById('hdr-status-badge').textContent==='RUNNING') setHdrStatus('IDLE','idle');
+  }
+}
+
+// ── Map (Plotly ITM + Leaflet) ────────────────────────────────────────────────
+const MAP_COLORS = [
+  '#f5a623','#00d4ff','#2ecc71','#e74c3c','#8b5cf6',
+  '#f39c12','#1abc9c','#e91e8c','#3498db','#ff6b35',
+  '#a8e6cf','#ffd3b6','#ffaaa5','#a29bfe','#55efc4',
+];
+
+function setMapMode(m) {
+  S.mapMode = m;
+  document.getElementById('mb-all').classList.toggle('on', m==='all');
+  document.getElementById('mb-one').classList.toggle('on', m==='one');
+  document.getElementById('map-sel-single').style.display = m==='one' ? 'inline-block' : 'none';
+  const viewMode = document.getElementById('map-view-mode')?.value || 'plotly';
+  if (viewMode === 'leaflet') renderLeafletDXF();
+  else renderShpMap();
+}
+
+function renderShpMap() {
+  if (!S.mapData || typeof Plotly==='undefined') return;
+  const filterMap  = S.mapMode==='one' ? document.getElementById('map-sel-single').value : '';
+  const mapsToShow = filterMap ? (filterMap in S.mapData ? [filterMap] : []) : Object.keys(S.mapData);
+
+  const traces = []; let totalPolys=0, ci=0;
+  mapsToShow.forEach(name => {
+    const polys = S.mapData[name];
+    if (!polys?.length) return;
+    const color = MAP_COLORS[ci++ % MAP_COLORS.length];
+    const px=[], py=[];
+    polys.forEach(ring => {
+      ring.forEach(([x,y]) => { px.push(x); py.push(y); });
+      px.push(null); py.push(null);
+    });
+    traces.push({ x:px, y:py, mode:'lines', type:'scatter', name,
+      fill:'toself', fillcolor:color+'22', line:{color,width:1.5}, hoverinfo:'name' });
+    totalPolys += polys.length;
+  });
+  if (!traces.length)
+    traces.push({x:[0],y:[0],mode:'markers',marker:{opacity:0},showlegend:false,hoverinfo:'skip'});
+
+  const layout = {
+    template:'plotly_dark',
+    paper_bgcolor:'#0a0d14', plot_bgcolor:'#0e1117',
+    font:{family:'IBM Plex Mono, monospace',color:'#d0d8f0',size:11},
+    xaxis:{gridcolor:'#1a2235',title:'East (m)',zeroline:false,tickformat:'.0f'},
+    yaxis:{gridcolor:'#1a2235',title:'North (m)',zeroline:false,scaleanchor:'x',tickformat:'.0f'},
+    legend:{bgcolor:'rgba(22,27,39,.9)',bordercolor:'#2a3348',borderwidth:1,font:{size:10},
+            orientation: mapsToShow.length>8?'h':'v'},
+    margin:{l:70,r:20,t:36,b:60},
+    title:{text: filterMap ? `קובץ: ${filterMap}` : `כל הקבצים (${mapsToShow.length})`,
+           font:{size:12,color:'#f5a623'}},
+    hovermode:'closest',
+    annotations: totalPolys===0 ? [{text:'אין נתונים להצגה',xref:'paper',yref:'paper',
+      x:.5,y:.5,showarrow:false,font:{color:'#5a6480',size:13}}] : [],
+  };
+  Plotly.react('shp-map-plot', traces, layout, {
+    responsive:true, displayModeBar:true, displaylogo:false,
+    modeBarButtonsToRemove:['toImage','sendDataToCloud'],
+  });
+  const cnt = document.getElementById('map-poly-count');
+  cnt.textContent = `${totalPolys} פוליגונים · ${mapsToShow.length} קבצים`;
+  cnt.style.display = 'inline-block';
+}
+
+window.addEventListener('resize', () => {
+  const pm = document.getElementById('panel-map');
+  if (pm?.classList.contains('active')) {
+    Plotly.relayout('shp-map-plot', {});
+    if (LMAP_DXF.instance) LMAP_DXF.instance.invalidateSize();
+  }
+});
+
+// ── Leaflet DXF map engine ────────────────────────────────────────────────────
+const LMAP_DXF = { instance: null, tileLayer: null, layers: [], currentBm: 'osm' };
+
+const DXF_BASEMAPS = {
+  'none':           { url: null, attr: '' },
+  'esri-satellite': { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr: 'Tiles &copy; Esri' },
+  'esri-topo':      { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', attr: 'Tiles &copy; Esri' },
+  'osm':            { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attr: '&copy; OpenStreetMap contributors' },
+  'carto-dark':     { url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', attr: '&copy; CARTO' }
+};
+
+// ITM (EPSG:2039) → WGS84 with 7-parameter Helmert
+function itmToWGS84(E, N) {
+  const a=6378137.0, f=1/298.257222101, b=a*(1-f), e2=2*f-f*f;
+  const k0=1.0000067, E0=219529.584, N0=626907.390;
+  const lon0=35.2045169444444*Math.PI/180, lat0=31.7343936111111*Math.PI/180;
+  const x=E-E0, y=N-N0;
+  const n=(a-b)/(a+b), n2=n*n, n3=n*n2, n4=n*n3;
+  const A0=a*(1-n+5/4*(n2-n3)+81/64*n4);
+  const A2=3*a/2*(n-n2+7/8*(n3-n4));
+  const A4=15*a/16*(n2-n3+55/64*n4);
+  const A6=35*a/48*(n3-n4);
+  const M0=A0*lat0-A2*Math.sin(2*lat0)+A4*Math.sin(4*lat0)-A6*Math.sin(6*lat0);
+  const Mf=M0+y/k0;
+  let phif=Mf/A0;
+  for(let i=0;i<10;i++){
+    const Mc=A0*phif-A2*Math.sin(2*phif)+A4*Math.sin(4*phif)-A6*Math.sin(6*phif);
+    const dMc=A0-2*A2*Math.cos(2*phif)+4*A4*Math.cos(4*phif)-6*A6*Math.cos(6*phif);
+    const dp=(Mf-Mc)/dMc; phif+=dp; if(Math.abs(dp)<1e-12) break;
+  }
+  const sinPf=Math.sin(phif),cosPf=Math.cos(phif),tanPf=sinPf/cosPf;
+  const ep2=e2/(1-e2), Nf=a/Math.sqrt(1-e2*sinPf*sinPf);
+  const Tf=tanPf*tanPf, Cf=ep2*cosPf*cosPf;
+  const Rf=a*(1-e2)/Math.pow(1-e2*sinPf*sinPf,1.5);
+  const D=x/(Nf*k0),D2=D*D,D3=D*D2,D4=D*D3,D5=D*D4,D6=D*D5;
+  const lat_g=phif-(Nf*tanPf/Rf)*(D2/2-(5+3*Tf+10*Cf-4*Cf*Cf-9*ep2)*D4/24+(61+90*Tf+298*Cf+45*Tf*Tf-252*ep2-3*Cf*Cf)*D6/720);
+  const lon_g=lon0+(D-(1+2*Tf+Cf)*D3/6+(5-2*Cf+28*Tf-3*Cf*Cf+8*ep2+24*Tf*Tf)*D5/120)/cosPf;
+  const sinLat=Math.sin(lat_g),cosLat=Math.cos(lat_g),sinLon=Math.sin(lon_g),cosLon=Math.cos(lon_g);
+  const Ng=a/Math.sqrt(1-e2*sinLat*sinLat);
+  let X=Ng*cosLat*cosLon, Y=Ng*cosLat*sinLon, Z=(Ng*(1-e2))*sinLat;
+  const sec2rad=Math.PI/(180*3600);
+  const rx=-0.3132*sec2rad, ry=-1.85274*sec2rad, rz=1.67299*sec2rad, s=-5.4262/1e6;
+  const Xw=X+23.772+s*X-rz*Y+ry*Z, Yw=Y+17.490+rz*X+s*Y-rx*Z, Zw=Z+17.859-ry*X+rx*Y+s*Z;
+  X=Xw; Y=Yw; Z=Zw;
+  const aW=6378137,fW=1/298.257223563,bW=aW*(1-fW),e2W=2*fW-fW*fW,ep2W=e2W/(1-e2W);
+  const p=Math.sqrt(X*X+Y*Y), th=Math.atan2(Z*aW,p*bW);
+  const latW=Math.atan2(Z+ep2W*bW*Math.pow(Math.sin(th),3),p-e2W*aW*Math.pow(Math.cos(th),3));
+  const lonW=Math.atan2(Y,X);
+  return [latW*180/Math.PI, lonW*180/Math.PI];
+}
+
+function setBasemap(bm) {
+  LMAP_DXF.currentBm = bm;
+  document.querySelectorAll('.basemap-btn').forEach(b => b.classList.toggle('active', b.dataset.bm === bm));
+  if (!LMAP_DXF.instance) return;
+  if (LMAP_DXF.tileLayer) { LMAP_DXF.instance.removeLayer(LMAP_DXF.tileLayer); LMAP_DXF.tileLayer = null; }
+  if (bm !== 'none' && DXF_BASEMAPS[bm].url) {
+    LMAP_DXF.tileLayer = L.tileLayer(DXF_BASEMAPS[bm].url, { attribution: DXF_BASEMAPS[bm].attr, maxZoom: 21 });
+    LMAP_DXF.tileLayer.addTo(LMAP_DXF.instance);
+    LMAP_DXF.tileLayer.bringToBack();
+  }
+}
+
+function switchMapView() {
+  const mode = document.getElementById('map-view-mode').value;
+  const bar  = document.getElementById('basemapBar');
+  const plotDiv = document.getElementById('shp-map-plot');
+  const leafDiv = document.getElementById('panel-map-leaflet');
+  if (mode === 'leaflet') {
+    plotDiv.style.display = 'none';
+    leafDiv.style.display = 'block';
+    if (bar) bar.style.display = '';
+    renderLeafletDXF();
+  } else {
+    leafDiv.style.display = 'none';
+    plotDiv.style.display = '';
+    if (bar) bar.style.display = 'none';
+    renderShpMap();
+  }
+}
+
+function renderLeafletDXF() {
+  if (!S.mapData || typeof L === 'undefined') return;
+  const filterMap  = S.mapMode === 'one' ? (document.getElementById('map-sel-single')?.value || '') : '';
+  const mapsToShow = filterMap
+    ? (filterMap in S.mapData ? [filterMap] : [])
+    : Object.keys(S.mapData);
+
+  // Collect WGS84 bounds
+  const allLatLon = [];
+  mapsToShow.forEach(name => {
+    (S.mapData[name] || []).forEach(ring =>
+      ring.forEach(([x,y]) => { try { allLatLon.push(itmToWGS84(x,y)); } catch(e){} })
+    );
+  });
+  if (!allLatLon.length) return;
+
+  // Init Leaflet once
+  if (!LMAP_DXF.instance) {
+    LMAP_DXF.instance = L.map('panel-map-leaflet', { zoomControl: true, attributionControl: true });
+    if (LMAP_DXF.currentBm !== 'none' && DXF_BASEMAPS[LMAP_DXF.currentBm].url) {
+      LMAP_DXF.tileLayer = L.tileLayer(DXF_BASEMAPS[LMAP_DXF.currentBm].url,
+        { attribution: DXF_BASEMAPS[LMAP_DXF.currentBm].attr, maxZoom: 21 });
+      LMAP_DXF.tileLayer.addTo(LMAP_DXF.instance);
+    }
+    LMAP_DXF.instance.setView(allLatLon[0], 14);
+  }
+
+  // Clear old layers
+  LMAP_DXF.layers.forEach(l => { try { LMAP_DXF.instance.removeLayer(l); } catch(e){} });
+  LMAP_DXF.layers = [];
+
+  let ci = 0;
+  mapsToShow.forEach(name => {
+    const polys = S.mapData[name];
+    if (!polys?.length) return;
+    const color = MAP_COLORS[ci++ % MAP_COLORS.length];
+    polys.forEach(ring => {
+      if (ring.length < 2) return;
+      const latlngs = ring.map(([x,y]) => { try { return itmToWGS84(x,y); } catch(e){ return null; } }).filter(Boolean);
+      if (latlngs.length < 2) return;
+      const layer = L.polygon(latlngs, { color, weight: 1.5, fillColor: color, fillOpacity: 0.12 });
+      layer.bindTooltip(name, { className: 'lf-tooltip', sticky: true });
+      layer.addTo(LMAP_DXF.instance);
+      LMAP_DXF.layers.push(layer);
+    });
+  });
+
+  try { LMAP_DXF.instance.fitBounds(allLatLon, { padding: [24, 24] }); } catch(e){}
+  setTimeout(() => { if (LMAP_DXF.instance) LMAP_DXF.instance.invalidateSize(); }, 120);
+}
+
+async function openExpFolder() {
+  const dir = S.outputDir;
+  if (!dir) { alert('לא נבחרה תיקיית יעד'); return; }
+  await fetch(API + '/api/open-folder?path=' + encodeURIComponent(dir));
+}
+
+// ── Per-box log ───────────────────────────────────────────────────────────────
+const BADGES = {ok:'OK   ',empty:'EMPTY',error:'ERROR',info:'INFO ',done:'DONE '};
+const _logStore = {'log-body-1':[], 'log-body-2':[], 'log-body-3':[]};
+const _logFilters = {'log-body-1':'all','log-body-2':'all','log-body-3':'all'};
+
+function addLogBox(boxId, kind, msg) {
+  const now = new Date().toLocaleTimeString('he',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const entry = {kind, time:now, msg};
+  if (_logStore[boxId]) _logStore[boxId].push(entry);
+  const flt = _logFilters[boxId] || 'all';
+  if (flt==='all' || flt===kind) _renderLogLine(boxId, entry);
+}
+function _renderLogLine(boxId, e) {
+  const div = document.createElement('div');
+  div.className='log-line'; div.dataset.kind=e.kind;
+  div.innerHTML =
+    `<span class="ll-time">${e.time}</span>` +
+    `<span class="ll-badge ${e.kind}">${BADGES[e.kind]||'     '}</span>` +
+    `<span class="ll-msg">${esc(e.msg)}</span>`;
+  const body = document.getElementById(boxId);
+  if (body) { body.appendChild(div); body.scrollTop=body.scrollHeight; }
+}
+function setFlt(btn, boxId) {
+  const bar = btn.closest('.log-bar');
+  bar.querySelectorAll('.flt-btn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  _logFilters[boxId] = btn.dataset.f;
+  const body = document.getElementById(boxId);
+  if (!body) return;
+  body.innerHTML = '';
+  (_logStore[boxId]||[]).forEach(e => {
+    if (_logFilters[boxId]==='all' || _logFilters[boxId]===e.kind) _renderLogLine(boxId, e);
+  });
+}
+function clearLogBox(boxId) {
+  if (_logStore[boxId]) _logStore[boxId] = [];
+  const body = document.getElementById(boxId);
+  if (body) body.innerHTML = '';
+}
+
+// ── Alert helper ─────────────────────────────────────────────────────────────
+function showAlert(id, cls, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.display='block';
+  el.innerHTML=`<div class="alert ${cls}"><span>${cls==='ae'?'❌':cls==='aw'?'⚠️':cls==='as'?'✅':'ℹ️'}</span><div>${esc(msg)}</div></div>`;
+}
+
+// ── Utils ────────────────────────────────────────────────────────────────────
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+// disable all export mode radios until checkboxes are checked
+['csv','kml','shp'].forEach(toggleExpMode);
+setHdrStatus('IDLE','idle');
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SHP MAP DASHBOARD
+// ═══════════════════════════════════════════════════════════════════════════
+
+const SHPMAP = {
+  instance:         null,
+  tileLayer:        null,
+  allLayers:        [],
+  filterCircle:     null,
+  filterPolyLayer:  null,
+  currentBm:        'esri-satellite',
+  data:             {},     // { mapName: [{coords,attrs}, ...] }
+  filteredSet:      null,   // null = no filter, Set of matching names
+  mapMode:          'all',  // 'all' | 'one'
+  singleMap:        '',
+  featureLayerMap:  [],     // [{name, idx, layer}]
+  hoveredLayer:     null,
+  drawMode:         false,
+  drawPoints:       [],     // [[lat, lng], ...]
+  drawPreviewLine:  null,
+  drawPolyLayer:    null,
+  _clickH:          null,
+  _dblClickH:       null,
+  _textDebounce:    null,
+};
+
+// Convert raw XY from SHP to [lat, lng] based on chosen coord system
+function smXYtoLatLon(x, y) {
+  const sys = document.getElementById('shpmap-coord-sys')?.value || 'itm';
+  if (sys === 'itm') return itmToWGS84(x, y);
+  return [y, x];  // WGS84: y=lat, x=lon
+}
+
+// ── Init Leaflet map ─────────────────────────────────────────────────────────
+function initShpmap() {
+  const el = document.getElementById('shpmap-leaflet');
+  if (!el || typeof L === 'undefined') return;
+  if (SHPMAP.instance) {
+    SHPMAP.instance.invalidateSize();
+    return;
+  }
+  SHPMAP.instance = L.map('shpmap-leaflet', { zoomControl: true, attributionControl: true });
+  SHPMAP.instance.setView([31.78, 34.98], 9);
+  setShpmapBasemap(SHPMAP.currentBm);
+}
+
+// ── Basemap ──────────────────────────────────────────────────────────────────
+function setShpmapBasemap(bm) {
+  SHPMAP.currentBm = bm;
+  document.querySelectorAll('#shpmap-basemap-strip [data-smbm]').forEach(b =>
+    b.classList.toggle('active', b.dataset.smbm === bm));
+  if (!SHPMAP.instance) return;
+  if (SHPMAP.tileLayer) { SHPMAP.instance.removeLayer(SHPMAP.tileLayer); SHPMAP.tileLayer = null; }
+  const cfg = DXF_BASEMAPS[bm];
+  if (cfg?.url) {
+    SHPMAP.tileLayer = L.tileLayer(cfg.url, { attribution: cfg.attr, maxZoom: 21 });
+    SHPMAP.tileLayer.addTo(SHPMAP.instance);
+    SHPMAP.tileLayer.bringToBack();
+  }
+}
+
+// ── Browse folder ────────────────────────────────────────────────────────────
+async function browseShpmap() {
+  const res = await fetch(API + '/api/browse');
+  const d = await res.json();
+  if (d.path) document.getElementById('shpmap-dir').value = d.path;
+}
+
+// ── Load SHP from folder via /api/geojson ────────────────────────────────────
+async function loadShpmapDir() {
+  const dir = document.getElementById('shpmap-dir').value.trim();
+  if (!dir) { alert('נא להזין תיקייה'); return; }
+  const recursive = document.getElementById('shpmap-recursive').checked ? '1' : '0';
+  const msgEl = document.getElementById('shpmap-load-msg');
+  msgEl.style.display = 'block';
+  msgEl.innerHTML = '<div class="alert ai">⏳ טוען קבצי SHP...</div>';
+  try {
+    const res = await fetch(API + '/api/geojson?dir=' + encodeURIComponent(dir) + '&recursive=' + recursive);
+    const d = await res.json();
+    if (d.error) throw new Error(d.error);
+    SHPMAP.data = d.maps || {};
+    const count = Object.keys(SHPMAP.data).length;
+    if (count === 0) {
+      msgEl.innerHTML = '<div class="alert aw">⚠️ לא נמצאו SHP בתיקייה זו</div>';
+      return;
+    }
+    let totalPolys = 0;
+    Object.values(SHPMAP.data).forEach(features => { totalPolys += features.length; });
+    msgEl.innerHTML = `<div class="alert as">✅ נטענו ${count} קבצי SHP · ${totalPolys} פיצ'רים</div>`;
+    const badge = document.getElementById('shpmap-count-badge');
+    badge.textContent = `${count} קבצים · ${totalPolys} פיצ'רים`;
+    badge.style.display = 'inline-block';
+    SHPMAP.filteredSet = null;
+    SHPMAP.mapMode = 'all';
+    SHPMAP.singleMap = '';
+    // populate single-map dropdown
+    const sel = document.getElementById('sm-sel-single');
+    sel.innerHTML = '<option value="">— בחר מפה —</option>';
+    Object.keys(SHPMAP.data).sort().forEach(n => {
+      const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o);
+    });
+    document.getElementById('sm-mb-all').classList.add('on');
+    document.getElementById('sm-mb-one').classList.remove('on');
+    sel.style.display = 'none';
+    initShpmap();
+    renderShpmapLayers();
+    renderSmMetaTable();
+  } catch(e) {
+    msgEl.innerHTML = `<div class="alert ae">❌ ${esc(e.message)}</div>`;
+  }
+}
+
+function clearShpmapData() {
+  SHPMAP.data = {};
+  SHPMAP.filteredSet = null;
+  SHPMAP.mapMode = 'all';
+  SHPMAP.singleMap = '';
+  SHPMAP.featureLayerMap = [];
+  SHPMAP.hoveredLayer = null;
+  if (SHPMAP.instance) {
+    SHPMAP.allLayers.forEach(l => { try { SHPMAP.instance.removeLayer(l); } catch(e){} });
+    SHPMAP.allLayers = [];
+    if (SHPMAP.filterCircle) { SHPMAP.instance.removeLayer(SHPMAP.filterCircle); SHPMAP.filterCircle = null; }
+    if (SHPMAP.filterPolyLayer) { SHPMAP.instance.removeLayer(SHPMAP.filterPolyLayer); SHPMAP.filterPolyLayer = null; }
+    if (SHPMAP.drawPreviewLine) { SHPMAP.instance.removeLayer(SHPMAP.drawPreviewLine); SHPMAP.drawPreviewLine = null; }
+    if (SHPMAP.drawPolyLayer) { SHPMAP.instance.removeLayer(SHPMAP.drawPolyLayer); SHPMAP.drawPolyLayer = null; }
+  }
+  SHPMAP.drawPoints = [];
+  const sel = document.getElementById('sm-sel-single');
+  sel.innerHTML = '<option value="">— בחר מפה —</option>';
+  sel.style.display = 'none';
+  document.getElementById('sm-mb-all').classList.add('on');
+  document.getElementById('sm-mb-one').classList.remove('on');
+  document.getElementById('shpmap-count-badge').style.display = 'none';
+  document.getElementById('shpmap-load-msg').style.display = 'none';
+  document.getElementById('sm-results-card').style.display = 'none';
+  document.getElementById('sm-meta-table-card').style.display = 'none';
+  document.getElementById('sm-meta-search').value = '';
+}
+
+// ── Build popup HTML from DBF attributes ─────────────────────────────────────
+function _buildAttrPopup(name, attrs) {
+  const entries = Object.entries(attrs || {}).filter(([,v]) => v !== null && v !== '');
+  if (!entries.length) return `<b>${esc(name)}</b>`;
+  let rows = entries.map(([k,v]) =>
+    `<tr><td style="color:var(--muted);padding:2px 6px 2px 0;white-space:nowrap;">${esc(k)}</td><td style="padding:2px 0;">${esc(String(v))}</td></tr>`
+  ).join('');
+  return `<div style="font-family:var(--mono);font-size:11px;max-width:280px;"><b style="font-size:12px;">${esc(name)}</b><table style="margin-top:4px;border-collapse:collapse;">${rows}</table></div>`;
+}
+
+// ── Render all SHP polygon layers ────────────────────────────────────────────
+function renderShpmapLayers() {
+  if (!SHPMAP.instance) return;
+  SHPMAP.allLayers.forEach(l => { try { SHPMAP.instance.removeLayer(l); } catch(e){} });
+  SHPMAP.allLayers = [];
+  SHPMAP.featureLayerMap = [];
+  SHPMAP.hoveredLayer = null;
+
+  const allLatLon = [];
+  let ci = 0;
+
+  Object.entries(SHPMAP.data).forEach(([name, features]) => {
+    if (!features?.length) return;
+    if (SHPMAP.mapMode === 'one' && SHPMAP.singleMap && name !== SHPMAP.singleMap) { ci++; return; }
+    const filtered = SHPMAP.filteredSet !== null && !SHPMAP.filteredSet.has(name);
+    const color = MAP_COLORS[ci++ % MAP_COLORS.length];
+
+    features.forEach((feature, fi) => {
+      const coords = feature.coords ?? feature;
+      const attrs  = feature.attrs  ?? {};
+      if (!Array.isArray(coords) || coords.length < 2) return;
+      let latlngs = [];
+      try {
+        latlngs = coords.map(([x,y]) => smXYtoLatLon(x,y)).filter(Boolean);
+      } catch(e) { return; }
+      if (latlngs.length < 2) return;
+      if (!filtered) allLatLon.push(...latlngs);
+
+      const layer = L.polygon(latlngs, {
+        color,
+        weight:      filtered ? 0.5 : 1.8,
+        fillColor:   color,
+        fillOpacity: filtered ? 0.02 : 0.18,
+        opacity:     filtered ? 0.25 : 1,
+      });
+      layer.bindTooltip(name, { className: 'lf-tooltip', sticky: true });
+      layer.bindPopup(_buildAttrPopup(name, attrs), { maxWidth: 320 });
+      layer.addTo(SHPMAP.instance);
+      SHPMAP.allLayers.push(layer);
+      SHPMAP.featureLayerMap.push({ name, idx: fi, layer, color });
+    });
+  });
+
+  if (allLatLon.length) {
+    try { SHPMAP.instance.fitBounds(allLatLon, { padding: [24, 24] }); } catch(e){}
+  }
+  setTimeout(() => { if (SHPMAP.instance) SHPMAP.instance.invalidateSize(); }, 120);
+}
+
+// ── Sync coord-system selector for input labels ──────────────────────────────
+function updateSmCoordLabels() {
+  const isItm = document.getElementById('sm-coord-sys').value === 'itm';
+  document.getElementById('sm-coord-label-1').textContent = isItm ? 'East (X) מטרים' : 'קו רוחב (lat)';
+  document.getElementById('sm-coord-label-2').textContent = isItm ? 'North (Y) מטרים' : 'קו אורך (lon)';
+  document.getElementById('sm-coord-lat').placeholder = isItm ? '219000' : '31.7845';
+  document.getElementById('sm-coord-lon').placeholder = isItm ? '590000' : '34.9876';
+}
+
+// ── Filter tab switcher ───────────────────────────────────────────────────────
+function setSmFilterTab(tab) {
+  ['coord','poly','place','text'].forEach(t => {
+    document.getElementById('ftab-' + t)?.classList.toggle('active', t === tab);
+    document.getElementById('ftab-content-' + t)?.classList.toggle('active', t === tab);
+  });
+}
+
+// ── Haversine distance (meters) ───────────────────────────────────────────────
+function haversineM(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// ── Point-in-polygon (ray casting) ───────────────────────────────────────────
+function ptInPoly(px, py, poly) {
+  let inside = false;
+  for (let i=0, j=poly.length-1; i<poly.length; j=i++) {
+    const [xi,yi] = poly[i], [xj,yj] = poly[j];
+    if (((yi>py) !== (yj>py)) && (px < (xj-xi)*(py-yi)/(yj-yi)+xi)) inside = !inside;
+  }
+  return inside;
+}
+
+// ── Filter 1: Coordinates + Radius ───────────────────────────────────────────
+function applySmRadiusFilter() {
+  if (!Object.keys(SHPMAP.data).length) { alert('יש לטעון קבצי SHP תחילה'); return; }
+  const sys    = document.getElementById('sm-coord-sys').value;
+  const v1     = parseFloat(document.getElementById('sm-coord-lat').value);
+  const v2     = parseFloat(document.getElementById('sm-coord-lon').value);
+  const radius = parseFloat(document.getElementById('sm-coord-radius').value);
+  if (isNaN(v1)||isNaN(v2)||isNaN(radius)||radius<=0) { alert('נא למלא נ״צ ורדיוס תקינים'); return; }
+
+  let lat, lon;
+  if (sys === 'itm') {
+    [lat, lon] = itmToWGS84(v1, v2);  // v1=E, v2=N
+  } else {
+    lat = v1; lon = v2;
+  }
+  _applySmCircleFilter(lat, lon, radius);
+}
+
+function _applySmCircleFilter(lat, lon, radius) {
+  initShpmap();
+  if (SHPMAP.filterCircle) { try { SHPMAP.instance.removeLayer(SHPMAP.filterCircle); } catch(e){} SHPMAP.filterCircle = null; }
+  if (SHPMAP.filterPolyLayer) { try { SHPMAP.instance.removeLayer(SHPMAP.filterPolyLayer); } catch(e){} SHPMAP.filterPolyLayer = null; }
+
+  SHPMAP.filterCircle = L.circle([lat,lon], {
+    radius, color:'#f5a623', weight:2, fillColor:'#f5a623', fillOpacity:0.06, dashArray:'6,4'
+  }).addTo(SHPMAP.instance);
+
+  const matched = new Set();
+  Object.entries(SHPMAP.data).forEach(([name, features]) => {
+    outer: for (const feature of (features||[])) {
+      const coords = feature.coords ?? feature;
+      for (const [x,y] of (coords||[])) {
+        let ll;
+        try { ll = smXYtoLatLon(x,y); } catch(e){ continue; }
+        if (haversineM(lat,lon,ll[0],ll[1]) <= radius) { matched.add(name); break outer; }
+      }
+    }
+  });
+
+  SHPMAP.filteredSet = matched;
+  renderShpmapLayers();
+  showSmResults(matched, `✓ נמצאו ${matched.size} פוליגונים ברדיוס ${radius.toLocaleString()}מ׳`);
+  try { SHPMAP.instance.panTo([lat,lon]); } catch(e){}
+}
+
+// ── Filter 2: Draw polygon ────────────────────────────────────────────────────
+function toggleSmDrawPoly() {
+  SHPMAP.drawMode = !SHPMAP.drawMode;
+  const btn = document.getElementById('sm-btn-draw');
+  initShpmap();
+
+  if (SHPMAP.drawMode) {
+    _smSetDrawUI(true, 0);
+    SHPMAP.instance.getContainer().style.cursor = 'crosshair';
+    // Disable polygon layers so clicks pass through to the map
+    SHPMAP.allLayers.forEach(l => { if (l._path) l._path.style.pointerEvents = 'none'; });
+
+    if (!SHPMAP._clickH) {
+      SHPMAP._clickH = (e) => {
+        if (!SHPMAP.drawMode) return;
+        SHPMAP.drawPoints.push([e.latlng.lat, e.latlng.lng]);
+        _updateSmDrawPreview(false);
+        _smSetDrawUI(true, SHPMAP.drawPoints.length);
+      };
+      SHPMAP._dblClickH = (e) => {
+        if (!SHPMAP.drawMode || SHPMAP.drawPoints.length < 3) return;
+        L.DomEvent.stop(e);
+        SHPMAP.drawMode = false;
+        SHPMAP.instance.getContainer().style.cursor = '';
+        SHPMAP.allLayers.forEach(l => { if (l._path) l._path.style.pointerEvents = ''; });
+        _updateSmDrawPreview(true);
+        _smSetDrawUI(false, SHPMAP.drawPoints.length, true);
+      };
+      SHPMAP.instance.on('click', SHPMAP._clickH);
+      SHPMAP.instance.on('dblclick', SHPMAP._dblClickH);
+    }
+  } else {
+    SHPMAP.instance.getContainer().style.cursor = '';
+    SHPMAP.allLayers.forEach(l => { if (l._path) l._path.style.pointerEvents = ''; });
+    _smSetDrawUI(false, SHPMAP.drawPoints.length, SHPMAP.drawPoints.length >= 3);
+  }
+}
+
+function _smSetDrawUI(drawing, pts, done) {
+  // FAB button
+  const fab = document.getElementById('sm-fab-draw');
+  const fabApply = document.getElementById('sm-fab-apply');
+  const fabStatus = document.getElementById('sm-fab-status');
+  if (fab) {
+    if (drawing) {
+      fab.innerHTML = '⏹ עצור ציור';
+      fab.style.background = '#e74c3c';
+      fab.style.color = '#fff';
+    } else {
+      fab.innerHTML = '✏️ צייר פוליגון';
+      fab.style.background = '#f5a623';
+      fab.style.color = '#111';
+    }
+  }
+  if (fabApply) fabApply.style.display = (done && pts >= 3) ? '' : 'none';
+  if (fabStatus) {
+    if (drawing) {
+      fabStatus.style.display = '';
+      fabStatus.textContent = pts === 0 ? 'לחץ על המפה להוספת נקודות · לחץ פעמיים לסיום' : `נקודות: ${pts} · לחץ פעמיים לסיום`;
+    } else if (done && pts >= 3) {
+      fabStatus.style.display = '';
+      fabStatus.style.color = '#2ecc71';
+      fabStatus.textContent = `✓ פוליגון סגור · ${pts} נקודות`;
+    } else {
+      fabStatus.style.display = 'none';
+    }
+  }
+  // Sync sidebar button too
+  const btn = document.getElementById('sm-btn-draw');
+  if (btn) {
+    if (drawing) { btn.textContent = '⏹ עצור'; btn.className = 'btn btn-danger btn-sm'; }
+    else { btn.textContent = '✏️ צייר'; btn.className = 'btn btn-warn btn-sm'; }
+  }
+  const status = document.getElementById('sm-poly-status');
+  if (status) {
+    if (drawing) status.textContent = pts === 0 ? 'נקודות: 0' : `נקודות: ${pts}`;
+    else if (done && pts >= 3) status.textContent = `פוליגון סגור · ${pts} נקודות`;
+    else status.textContent = '';
+  }
+}
+
+function _updateSmDrawPreview(close) {
+  if (SHPMAP.drawPreviewLine) { try { SHPMAP.instance.removeLayer(SHPMAP.drawPreviewLine); } catch(e){} SHPMAP.drawPreviewLine = null; }
+  if (close) {
+    if (SHPMAP.drawPolyLayer) { try { SHPMAP.instance.removeLayer(SHPMAP.drawPolyLayer); } catch(e){} }
+    SHPMAP.drawPolyLayer = L.polygon(SHPMAP.drawPoints, {
+      color:'#00d4ff', weight:2, fillColor:'#00d4ff', fillOpacity:0.10
+    }).addTo(SHPMAP.instance);
+  } else if (SHPMAP.drawPoints.length >= 1) {
+    SHPMAP.drawPreviewLine = L.polyline(SHPMAP.drawPoints, {
+      color:'#00d4ff', weight:2, dashArray:'5,5'
+    }).addTo(SHPMAP.instance);
+  }
+}
+
+function clearSmDrawPoly() {
+  SHPMAP.drawPoints = [];
+  SHPMAP.drawMode = false;
+  if (SHPMAP.instance) SHPMAP.instance.getContainer().style.cursor = '';
+  SHPMAP.allLayers.forEach(l => { if (l._path) l._path.style.pointerEvents = ''; });
+  if (SHPMAP.drawPreviewLine) { try { SHPMAP.instance.removeLayer(SHPMAP.drawPreviewLine); } catch(e){} SHPMAP.drawPreviewLine = null; }
+  if (SHPMAP.drawPolyLayer) { try { SHPMAP.instance.removeLayer(SHPMAP.drawPolyLayer); } catch(e){} SHPMAP.drawPolyLayer = null; }
+  _smSetDrawUI(false, 0, false);
+}
+
+function applySmPolyFilter() {
+  if (SHPMAP.drawPoints.length < 3) { alert('יש לצייר פוליגון עם לפחות 3 נקודות'); return; }
+  if (!Object.keys(SHPMAP.data).length) { alert('יש לטעון קבצי SHP תחילה'); return; }
+  if (SHPMAP.filterCircle) { try { SHPMAP.instance.removeLayer(SHPMAP.filterCircle); } catch(e){} SHPMAP.filterCircle = null; }
+
+  const fp = SHPMAP.drawPoints;  // [[lat,lng], ...]
+  const matched = new Set();
+
+  Object.entries(SHPMAP.data).forEach(([name, features]) => {
+    outer: for (const feature of (features||[])) {
+      const ring = feature.coords ?? feature;
+      // Check if any vertex of the SHP polygon is inside the drawn polygon
+      for (const [x,y] of (ring||[])) {
+        let ll;
+        try { ll = smXYtoLatLon(x,y); } catch(e){ continue; }
+        if (ptInPoly(ll[0], ll[1], fp)) { matched.add(name); break outer; }
+      }
+      // Check if any drawn polygon vertex is inside the SHP polygon
+      const ringLL = (ring||[]).map(([x,y]) => { try { return smXYtoLatLon(x,y); } catch(e){ return null; } }).filter(Boolean);
+      for (const fpt of fp) {
+        if (ptInPoly(fpt[0], fpt[1], ringLL)) { matched.add(name); break outer; }
+      }
+    }
+  });
+
+  SHPMAP.filteredSet = matched;
+  renderShpmapLayers();
+  showSmResults(matched, `✓ נמצאו ${matched.size} פוליגונים בתוך האזור`);
+}
+
+// ── Filter 3: Settlement name + radius ───────────────────────────────────────
+async function applySmPlaceFilter() {
+  const name   = document.getElementById('sm-place-name').value.trim();
+  const radius = parseFloat(document.getElementById('sm-place-radius').value);
+  if (!name) { alert('נא להזין שם ישוב'); return; }
+  if (!Object.keys(SHPMAP.data).length) { alert('יש לטעון קבצי SHP תחילה'); return; }
+  if (isNaN(radius)||radius<=0) { alert('נא להזין רדיוס תקין'); return; }
+
+  const statusEl = document.getElementById('sm-place-status');
+  statusEl.style.color = 'var(--muted)';
+  statusEl.textContent = '⏳ מחפש ישוב...';
+
+  try {
+    const url = 'https://nominatim.openstreetmap.org/search?q=' +
+      encodeURIComponent(name) + '&countrycodes=il&format=json&limit=1&accept-language=he';
+    const res  = await fetch(url, { headers: { 'User-Agent': 'SHPMapDashboard/1.0' } });
+    const data = await res.json();
+    if (!data.length) {
+      statusEl.style.color = 'var(--danger)';
+      statusEl.textContent = `❌ לא נמצא: "${name}"`;
+      return;
+    }
+    const lat = parseFloat(data[0].lat), lon = parseFloat(data[0].lon);
+    statusEl.style.color = 'var(--success)';
+    statusEl.textContent = `📍 ${data[0].display_name}`;
+    _applySmCircleFilter(lat, lon, radius);
+  } catch(e) {
+    statusEl.style.color = 'var(--danger)';
+    statusEl.textContent = `❌ שגיאה: ${e.message}`;
+  }
+}
+
+// ── Clear all filters ─────────────────────────────────────────────────────────
+function clearSmFilter() {
+  SHPMAP.filteredSet = null;
+  if (SHPMAP.instance) {
+    if (SHPMAP.filterCircle) { try { SHPMAP.instance.removeLayer(SHPMAP.filterCircle); } catch(e){} SHPMAP.filterCircle = null; }
+    if (SHPMAP.filterPolyLayer) { try { SHPMAP.instance.removeLayer(SHPMAP.filterPolyLayer); } catch(e){} SHPMAP.filterPolyLayer = null; }
+  }
+  clearSmDrawPoly();
+  document.getElementById('sm-results-card').style.display = 'none';
+  document.getElementById('sm-place-status').textContent = '';
+  renderShpmapLayers();
+}
+
+// ── Show results card ─────────────────────────────────────────────────────────
+function showSmResults(matchedSet, title) {
+  const card    = document.getElementById('sm-results-card');
+  const body    = document.getElementById('sm-results-body');
+  const titleEl = document.getElementById('sm-results-title');
+  card.style.display = '';
+  titleEl.textContent = title;
+  body.innerHTML = '';
+
+  const total = Object.keys(SHPMAP.data).length;
+  const summary = document.createElement('div');
+  summary.style.cssText = 'color:var(--muted);font-size:11px;margin-bottom:6px;';
+  summary.textContent = `${matchedSet.size} מתוך ${total} קבצים`;
+  body.appendChild(summary);
+
+  if (matchedSet.size === 0) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'color:var(--muted);font-size:11px;padding:4px 0;';
+    empty.textContent = 'לא נמצאו פוליגונים תואמים';
+    body.appendChild(empty);
+    return;
+  }
+
+  [...matchedSet].sort().forEach(name => {
+    const chip = document.createElement('div');
+    chip.className = 'result-chip match';
+    chip.textContent = '✓ ' + name;
+    body.appendChild(chip);
+  });
+}
+
+// ── Single-map mode ───────────────────────────────────────────────────────────
+function setSmMapMode(mode) {
+  SHPMAP.mapMode = mode;
+  document.getElementById('sm-mb-all').classList.toggle('on', mode === 'all');
+  document.getElementById('sm-mb-one').classList.toggle('on', mode === 'one');
+  const sel = document.getElementById('sm-sel-single');
+  sel.style.display = mode === 'one' ? '' : 'none';
+  SHPMAP.singleMap = mode === 'one' ? sel.value : '';
+  SHPMAP.filteredSet = null;
+  renderShpmapLayers();
+  renderSmMetaTable();
+}
+
+// ── Free text search ──────────────────────────────────────────────────────────
+function smTextSearchDebounced() {
+  clearTimeout(SHPMAP._textDebounce);
+  SHPMAP._textDebounce = setTimeout(applySmTextSearch, 220);
+}
+
+function applySmTextSearch() {
+  const q = (document.getElementById('sm-text-query').value || '').trim().toLowerCase();
+  const statusEl = document.getElementById('sm-text-status');
+  if (!q) { clearSmTextSearch(); return; }
+  const matched = new Set();
+  Object.entries(SHPMAP.data).forEach(([name, features]) => {
+    for (const f of features) {
+      const haystack = name.toLowerCase() + ' ' + Object.values(f.attrs || {}).join(' ').toLowerCase();
+      if (haystack.includes(q)) { matched.add(name); break; }
+    }
+  });
+  SHPMAP.filteredSet = matched;
+  renderShpmapLayers();
+  renderSmMetaTable(q);
+  showSmResults(matched, `🔍 "${q}" — ${matched.size} קבצים תואמים`);
+  statusEl.textContent = `נמצאו ${matched.size} קבצים · ${_countMatchingFeatures(q)} פיצ'רים`;
+}
+
+function clearSmTextSearch() {
+  document.getElementById('sm-text-query').value = '';
+  document.getElementById('sm-text-status').textContent = '';
+  SHPMAP.filteredSet = null;
+  document.getElementById('sm-results-card').style.display = 'none';
+  renderShpmapLayers();
+  renderSmMetaTable();
+}
+
+function _countMatchingFeatures(q) {
+  let n = 0;
+  Object.entries(SHPMAP.data).forEach(([name, features]) => {
+    features.forEach(f => {
+      const h = name.toLowerCase() + ' ' + Object.values(f.attrs || {}).join(' ').toLowerCase();
+      if (h.includes(q)) n++;
+    });
+  });
+  return n;
+}
+
+// ── Metadata table ────────────────────────────────────────────────────────────
+function renderSmMetaTable(highlightQuery) {
+  const card   = document.getElementById('sm-meta-table-card');
+  const thead  = document.getElementById('sm-meta-thead');
+  const tbody  = document.getElementById('sm-meta-tbody');
+  const countEl = document.getElementById('sm-meta-count');
+
+  // Collect rows
+  const rows = [];
+  const fieldSet = new Set();
+  Object.entries(SHPMAP.data).forEach(([name, features]) => {
+    if (SHPMAP.mapMode === 'one' && SHPMAP.singleMap && name !== SHPMAP.singleMap) return;
+    features.forEach((f, idx) => {
+      Object.keys(f.attrs || {}).forEach(k => fieldSet.add(k));
+      rows.push({ name, idx, attrs: f.attrs || {} });
+    });
+  });
+
+  if (!rows.length) { card.style.display = 'none'; return; }
+  card.style.display = '';
+
+  const fields = [...fieldSet];
+
+  // Header
+  thead.innerHTML = '<tr><th>שם מפה</th>' + fields.map(f => `<th>${esc(f)}</th>`).join('') + '</tr>';
+
+  // Filter by table search box
+  const tableQ = (document.getElementById('sm-meta-search').value || '').trim().toLowerCase();
+  const activeQ = highlightQuery || tableQ;
+  const filtered = activeQ
+    ? rows.filter(r => {
+        const h = r.name.toLowerCase() + ' ' + Object.values(r.attrs).join(' ').toLowerCase();
+        return h.includes(activeQ);
+      })
+    : rows;
+
+  countEl.textContent = filtered.length + ' רשומות';
+
+  const CAP = 1000;
+  const slice = filtered.slice(0, CAP);
+
+  tbody.innerHTML = slice.map(r => {
+    const cells = fields.map(f => `<td title="${esc(String(r.attrs[f] ?? ''))}">${esc(String(r.attrs[f] ?? ''))}</td>`).join('');
+    return `<tr class="sm-meta-tr" data-map="${esc(r.name)}" data-idx="${r.idx}"><td>${esc(r.name)}</td>${cells}</tr>`;
+  }).join('');
+
+  if (filtered.length > CAP) {
+    tbody.innerHTML += `<tr><td colspan="${fields.length + 1}" style="color:var(--muted);text-align:center;padding:8px 0;">...ועוד ${filtered.length - CAP} רשומות נוספות</td></tr>`;
+  }
+
+  // Delegated hover → focus map
+  tbody.onmouseover = (e) => {
+    const tr = e.target.closest('tr[data-map]');
+    if (!tr) return;
+    document.querySelectorAll('.sm-meta-tr.sm-focused').forEach(el => el.classList.remove('sm-focused'));
+    tr.classList.add('sm-focused');
+    smFocusFeature(tr.dataset.map, parseInt(tr.dataset.idx));
+  };
+}
+
+function filterSmMetaTable() {
+  renderSmMetaTable();
+}
+
+// ── Focus map on a specific feature ──────────────────────────────────────────
+function smFocusFeature(mapName, featureIdx) {
+  if (!SHPMAP.instance) return;
+  const features = SHPMAP.data[mapName];
+  if (!features?.[featureIdx]) return;
+  const coords = features[featureIdx].coords;
+  if (!coords?.length) return;
+  try {
+    const latlngs = coords.map(([x,y]) => smXYtoLatLon(x,y)).filter(Boolean);
+    if (!latlngs.length) return;
+    const bounds = L.latLngBounds(latlngs);
+    SHPMAP.instance.fitBounds(bounds, { padding: [60, 60], maxZoom: 18 });
+    // Highlight layer
+    if (SHPMAP.hoveredLayer) {
+      const prev = SHPMAP.featureLayerMap.find(e => e.layer === SHPMAP.hoveredLayer);
+      if (prev) SHPMAP.hoveredLayer.setStyle({ weight: 1.8, fillOpacity: 0.18 });
+    }
+    const entry = SHPMAP.featureLayerMap.find(e => e.name === mapName && e.idx === featureIdx);
+    if (entry) {
+      entry.layer.setStyle({ weight: 3.5, fillOpacity: 0.45 });
+      entry.layer.bringToFront();
+      SHPMAP.hoveredLayer = entry.layer;
+    }
+  } catch(e) {}
+}
+
+// Resize SHP dashboard map when panel becomes active
+window.addEventListener('resize', () => {
+  if (document.getElementById('panel-shpmap')?.classList.contains('active')) {
+    if (SHPMAP.instance) SHPMAP.instance.invalidateSize();
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PANEL 4 — TRAINING DATA
+// ═══════════════════════════════════════════════════════════════════════════
+
+// מנרמל תאריך לפורמט YYYY-MM-DD לצורך input[type=date]
+function dtNormalizeDate(raw) {
+  if (!raw) return '';
+  const s = String(raw).trim();
+  // כבר ISO
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // DD/MM/YYYY או DD.MM.YYYY
+  const m = s.match(/^(\d{1,2})[\/\.](\d{1,2})[\/\.](\d{4})/);
+  if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  return '';
+}
+
+const DT_COLUMNS = [
+  'project_id','project_name','map_type','survey_type','site_type',
+  'client_name','city','gush','helka','survey_date','finish_date',
+  'area_sqm','official_area_sqm','perimeter_m','shape_index',
+  'center_lat','center_lon','distance_km','survey_points',
+  'quoted_price','actual_hours','hourly_cost',
+  'profit','profit_margin_pct','status','is_accepted'
+];
+const DT_SURVEY_TYPES  = ['טופוגרפית','לתכנון','לקדסטר','תצ"ר'];
+const DT_SITE_TYPES    = ['open','mixed','built'];
+const DT_STATUSES      = ['in_progress','completed','submitted','archived'];
+const DT_IS_ACCEPTED   = ['','yes','no','pending'];
+
+let DT_ROWS     = [];
+let _dtSaveTimer = null;
+let _dtInitDone  = false;
+
+// ── טעינה ראשונית מהשמירה הקודמת (פעם אחת בפתיחת הפאנל) ──────────────────
+async function dataInitLoad() {
+  if (_dtInitDone) return;
+  _dtInitDone = true;
+  try {
+    const res  = await fetch(API + '/api/training-load');
+    const data = await res.json();
+    if (data.rows && data.rows.length) {
+      DT_ROWS = data.rows.map(row => {
+        row.survey_date = dtNormalizeDate(row.survey_date);
+        row.finish_date = dtNormalizeDate(row.finish_date);
+        return row;
+      });
+      dtRenderTable();
+    }
+  } catch(e) { /* silent — שרת לא עובד עדיין */ }
+}
+
+// ── טעינה מהמפות שעובדו (קריאה ל-server) ──────────────────────────────────
+async function dataLoadFromState() {
+  const lat = document.getElementById('dt-office-lat').value || 32.0883;
+  const lon = document.getElementById('dt-office-lon').value || 34.8878;
+  try {
+    const res  = await fetch(`${API}/api/training-data?lat=${lat}&lon=${lon}`);
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+
+    // שמור שדות כספיים שהמשתמש כבר מילא
+    const prevById = {};
+    DT_ROWS.forEach(r => { if (r.project_id) prevById[r.project_id] = r; });
+
+    DT_ROWS = data.rows.map(row => {
+      // נרמל תאריכים ל-YYYY-MM-DD לפני הצגה ב-input[type=date]
+      row.survey_date = dtNormalizeDate(row.survey_date);
+      row.finish_date = dtNormalizeDate(row.finish_date);
+
+      const prev = prevById[row.project_id];
+      if (prev) {
+        ['quoted_price','actual_hours','hourly_cost','site_type',
+         'status','is_accepted','finish_date','project_name']
+          .forEach(k => { if (prev[k] !== '' && prev[k] != null) row[k] = prev[k]; });
+      }
+      dtRecomputeFinance(row);
+      return row;
+    });
+    dtRenderTable();
+    dtScheduleSave();
+  } catch(e) {
+    alert('שגיאה בטעינה מהשרת: ' + e.message);
+  }
+}
+
+// ── חישוב רווח ושולי רווח ──────────────────────────────────────────────────
+function dtRecomputeFinance(row) {
+  const q = parseFloat(row.quoted_price);
+  const h = parseFloat(row.actual_hours);
+  const c = parseFloat(row.hourly_cost);
+  if (!isFinite(q) || !isFinite(h) || !isFinite(c)) {
+    row.profit = ''; row.profit_margin_pct = '';
+    return;
+  }
+  const profit = q - (h * c);
+  row.profit            = +profit.toFixed(2);
+  row.profit_margin_pct = q > 0 ? +((profit / q) * 100).toFixed(2) : '';
+}
+
+// ── החל עלות שעה ברירת מחדל לשורות ריקות ──────────────────────────────────
+function dataApplyDefaultCost() {
+  const c = parseFloat(document.getElementById('dt-hourly-cost').value) || 180;
+  DT_ROWS.forEach(row => {
+    if (row.hourly_cost === '' || row.hourly_cost == null) row.hourly_cost = c;
+    dtRecomputeFinance(row);
+  });
+  dtRenderTable();
+}
+
+// ── הוסף שורה ריקה ────────────────────────────────────────────────────────
+function dataAddBlankRow() {
+  const today = new Date().toISOString().slice(0,10);
+  const c = parseFloat(document.getElementById('dt-hourly-cost')?.value) || 180;
+  DT_ROWS.push({
+    project_id:'', project_name:'', map_type:'', survey_type:'לקדסטר', site_type:'mixed',
+    client_name:'', city:'', gush:'', helka:'', survey_date:today, finish_date:'',
+    area_sqm:'', official_area_sqm:'', perimeter_m:'', shape_index:'',
+    center_lat:'', center_lon:'', distance_km:'', survey_points:'',
+    quoted_price:'', actual_hours:'', hourly_cost:c,
+    profit:'', profit_margin_pct:'', status:'completed', is_accepted:'',
+  });
+  dtRenderTable();
+}
+
+function dataDeleteRow(idx) {
+  if (!confirm('למחוק שורה זו?')) return;
+  DT_ROWS.splice(idx, 1);
+  dtRenderTable();
+  dtScheduleSave();
+}
+
+// ── עדכון תא ──────────────────────────────────────────────────────────────
+function dtCellChange(idx, field, val) {
+  const row = DT_ROWS[idx];
+  if (!row) return;
+  row[field] = val;
+  if (['quoted_price','actual_hours','hourly_cost'].includes(field)) {
+    dtRecomputeFinance(row);
+    dtRenderTable();
+  }
+  dtScheduleSave();
+}
+
+// ── שמירה אוטומטית לשרת (debounce 1.5s) ──────────────────────────────────
+function dtScheduleSave() {
+  clearTimeout(_dtSaveTimer);
+  _dtSaveTimer = setTimeout(async () => {
+    try {
+      const res = await fetch(API + '/api/training-save', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ rows: DT_ROWS })
+      });
+      if (res.ok) {
+        const ind = document.getElementById('dt-save-indicator');
+        if (ind) { ind.style.display='inline'; setTimeout(() => ind.style.display='none', 2000); }
+      }
+    } catch(e) { console.warn('training save failed', e); }
+  }, 1500);
+}
+
+// ── ייצוא CSV ─────────────────────────────────────────────────────────────
+async function dataExportCSV() {
+  if (!DT_ROWS.length) { alert('אין שורות לייצוא.'); return; }
+  const lines = [DT_COLUMNS.join(',')];
+  DT_ROWS.forEach(row => {
+    const cells = DT_COLUMNS.map(c => {
+      let v = row[c];
+      if (v === null || v === undefined) v = '';
+      v = String(v);
+      if (/[,"\n]/.test(v)) v = '"' + v.replace(/"/g,'""') + '"';
+      return v;
+    });
+    lines.push(cells.join(','));
+  });
+  const csv      = '﻿' + lines.join('\n');
+  const fileName = `training_data_${new Date().toISOString().slice(0,10)}.csv`;
+
+  if (window.showSaveFilePicker) {
+    try {
+      const fileHandle = await window.showSaveFilePicker({
+        suggestedName: fileName,
+        types: [{ description: 'קובץ CSV', accept: { 'text/csv': ['.csv'] } }]
+      });
+      const writable = await fileHandle.createWritable();
+      await writable.write(csv);
+      await writable.close();
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = fileName;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+    }
+  } else {
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = fileName;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  }
+}
+
+// ── רנדור הטבלה ───────────────────────────────────────────────────────────
+function dtRenderTable() {
+  const tbody   = document.getElementById('dt-tbody');
+  const empty   = document.getElementById('dt-empty');
+  const counter = document.getElementById('dt-row-count');
+  if (counter) counter.textContent = DT_ROWS.length;
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  if (!DT_ROWS.length) { if (empty) empty.style.display = 'block'; return; }
+  if (empty) empty.style.display = 'none';
+
+  DT_ROWS.forEach((row, idx) => {
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid var(--border)';
+
+    // כפתור מחיקה
+    const tdDel = document.createElement('td');
+    tdDel.style.cssText = 'padding:4px;text-align:center;';
+    tdDel.innerHTML = `<button class="btn btn-danger btn-xs" onclick="dataDeleteRow(${idx})" title="מחק">✕</button>`;
+    tr.appendChild(tdDel);
+
+    // תא input
+    const mkInput = (field, type='text', extra='') => {
+      const td = document.createElement('td');
+      td.style.cssText = 'padding:3px 5px;';
+      const v = row[field] == null ? '' : row[field];
+      td.innerHTML = `<input class="fc fc-mono" type="${type}" value="${esc(String(v))}" ${extra}
+        style="padding:4px 6px;font-size:11px;min-width:90px;"
+        onchange="dtCellChange(${idx},'${field}',this.value)">`;
+      return td;
+    };
+    // תא select
+    const mkSelect = (field, opts) => {
+      const td = document.createElement('td');
+      td.style.cssText = 'padding:3px 5px;';
+      const sel = document.createElement('select');
+      sel.className = 'fc fc-mono';
+      sel.style.cssText = 'padding:4px 6px;font-size:11px;min-width:90px;';
+      opts.forEach(o => {
+        const op = document.createElement('option');
+        op.value = o; op.textContent = o || '—';
+        if (String(row[field]) === o) op.selected = true;
+        sel.appendChild(op);
+      });
+      sel.onchange = () => dtCellChange(idx, field, sel.value);
+      td.appendChild(sel);
+      return td;
+    };
+    // תא read-only (אוטומטי)
+    const mkAuto = (field, fmt) => {
+      const td = document.createElement('td');
+      const v  = row[field];
+      td.style.cssText = 'padding:6px 8px;color:var(--accent2);font-size:11px;text-align:right;background:rgba(0,212,255,.04);white-space:nowrap;';
+      td.textContent   = (v === '' || v == null) ? '—' : (fmt ? fmt(v) : v);
+      return td;
+    };
+    // תא נגזר (profit/margin)
+    const mkDerived = (field, fmt) => {
+      const td = document.createElement('td');
+      const v  = row[field];
+      const n  = parseFloat(v);
+      const color = isFinite(n) ? (n >= 0 ? 'var(--success)' : 'var(--danger)') : 'var(--text)';
+      td.style.cssText = `padding:6px 8px;color:${color};font-size:11px;text-align:right;background:rgba(46,204,113,.04);font-weight:500;`;
+      td.textContent   = (v === '' || v == null) ? '—' : (fmt ? fmt(v) : v);
+      return td;
+    };
+
+    tr.appendChild(mkInput('project_id'));
+    tr.appendChild(mkInput('project_name'));
+    tr.appendChild(mkAuto('map_type'));
+    tr.appendChild(mkSelect('survey_type', DT_SURVEY_TYPES));
+    tr.appendChild(mkSelect('site_type',   DT_SITE_TYPES));
+    tr.appendChild(mkInput('client_name'));
+    tr.appendChild(mkInput('city'));
+    tr.appendChild(mkInput('gush'));
+    tr.appendChild(mkInput('helka'));
+    tr.appendChild(mkInput('survey_date', 'date'));
+    tr.appendChild(mkInput('finish_date', 'date'));
+    tr.appendChild(mkAuto('area_sqm'));
+    tr.appendChild(mkAuto('official_area_sqm'));
+    tr.appendChild(mkAuto('perimeter_m'));
+    tr.appendChild(mkAuto('shape_index'));
+    tr.appendChild(mkAuto('center_lat'));
+    tr.appendChild(mkAuto('center_lon'));
+    tr.appendChild(mkAuto('distance_km'));
+    tr.appendChild(mkAuto('survey_points'));
+    tr.appendChild(mkInput('quoted_price', 'number'));
+    tr.appendChild(mkInput('actual_hours', 'number'));
+    tr.appendChild(mkInput('hourly_cost',  'number'));
+    tr.appendChild(mkDerived('profit'));
+    tr.appendChild(mkDerived('profit_margin_pct', v => v + '%'));
+    tr.appendChild(mkSelect('status',      DT_STATUSES));
+    tr.appendChild(mkSelect('is_accepted', DT_IS_ACCEPTED));
+
+    tbody.appendChild(tr);
+  });
+}
+
+unlockPanel('data');
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PANEL PREDICT — חיזוי רווחיות
+// ═══════════════════════════════════════════════════════════════════════════
+
+unlockPanel('predict');
+
+// סטטוס מודל בכניסה לפאנל
+async function predictInitLoad() {
+  try {
+    const res  = await fetch(API + '/api/model-status');
+    const data = await res.json();
+    prRenderModelBadge(data);
+  } catch(e) {
+    prRenderModelBadge({ loaded: false, error: 'השרת לא מגיב' });
+  }
+}
+
+function prRenderModelBadge(data) {
+  const el = document.getElementById('pr-model-badge');
+  if (!el) return;
+  if (data.loaded) {
+    el.innerHTML = `
+      <span class="badge bg">✓ מודל טעון</span>
+      <span class="badge bb" style="font-size:10px;">n=${data.n_train}</span>
+      <span class="badge bb" style="font-size:10px;">CV ${data.cv_accuracy}%</span>`;
+  } else {
+    el.innerHTML = `<span class="badge br">⚠ ${data.error || 'מודל לא נטען'}</span>
+      <span style="font-size:11px;color:var(--muted);">— מלא נתוני כספים ב<a href="#" onclick="goPanel('data');return false;" style="color:var(--accent2);">שלב 4</a> ולחץ "אמן מחדש"</span>`;
+  }
+}
+
+async function prTrainModel() {
+  const btn = document.getElementById('btn-train-model');
+  const lbl = document.getElementById('pr-loading');
+  if (lbl) { lbl.textContent = 'מאמן מודל...'; lbl.style.display = 'inline'; }
+  if (btn) btn.disabled = true;
+  try {
+    const res  = await fetch(API + '/api/train-model', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+    const data = await res.json();
+    if (data.ok) {
+      prRenderModelBadge({ loaded: true, n_train: data.n_train, cv_accuracy: Math.round(data.cv_acc * 100) });
+      if (lbl) { lbl.textContent = `✓ מודל עודכן (${data.n_train} רשומות, CV ${Math.round(data.cv_acc * 100)}%)`; lbl.style.color = 'var(--success)'; }
+    } else {
+      if (lbl) { lbl.textContent = '⚠ ' + (data.error || 'אימון נכשל'); lbl.style.color = 'var(--danger)'; }
+    }
+  } catch(e) {
+    if (lbl) { lbl.textContent = '⚠ שגיאת תקשורת עם השרת'; lbl.style.color = 'var(--danger)'; }
+  } finally {
+    if (btn) btn.disabled = false;
+    setTimeout(() => { if (lbl) { lbl.style.display = 'none'; lbl.style.color = 'var(--muted)'; } }, 4000);
+  }
+}
+
+async function runPrediction() {
+  const area   = parseFloat(document.getElementById('pr-area').value)   || 0;
+  const pts    = parseFloat(document.getElementById('pr-pts').value)    || 0;
+  const dist   = parseFloat(document.getElementById('pr-dist').value)   || 0;
+  const shape  = parseFloat(document.getElementById('pr-shape').value)  || 1;
+  const price  = parseFloat(document.getElementById('pr-price').value)  || 0;
+  const maptype= document.getElementById('pr-maptype').value;
+
+  if (!area || !price) {
+    prShowError('נא לספק תחום מדידה (ציור על מפה או העלאת DWG) ולהזין מחיר הצעה');
+    return;
+  }
+
+  const btn = document.getElementById('pr-run-btn');
+  const lbl = document.getElementById('pr-predict-loading');
+  if (lbl) { lbl.textContent = 'מחשב...'; lbl.style.display = 'inline'; }
+  if (btn) btn.disabled = true;
+  prShowError('');
+
+  try {
+    const res  = await fetch(API + '/api/predict', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ area_sqm: area, survey_points: pts, distance_km: dist,
+                             shape_index: shape, quoted_price: price, map_type: maptype })
+    });
+    const data = await res.json();
+    if (data.error) { prShowError(data.error); return; }
+    prRenderResults(data);
+  } catch(e) {
+    prShowError('שגיאה בתקשורת עם השרת: ' + e.message);
+  } finally {
+    lbl.style.display = 'none';
+    if (btn) btn.disabled = false;
+  }
+}
+
+function prShowError(msg) {
+  const box = document.getElementById('pr-error-box');
+  if (!box) return;
+  if (msg) { box.textContent = '⚠ ' + msg; box.style.display = 'flex'; }
+  else     { box.style.display = 'none'; }
+}
+
+function prFmt(n) {
+  return n == null ? '—' : '₪' + Math.round(n).toLocaleString('he-IL');
+}
+
+function prRenderResults(data) {
+  // ── verdict card ──────────────────────────────────────────────────────────
+  const verdictZone = document.getElementById('pr-verdict-zone');
+  const card        = document.getElementById('pr-verdict-card');
+  verdictZone.style.display = 'block';
+
+  const icons  = { profitable: '✅', borderline: '⚠️', not_profitable: '❌' };
+  const labels = { profitable: 'רווחי', borderline: 'גבולי', not_profitable: 'לא כדאי' };
+  const colors = { profitable: 'var(--success)', borderline: 'var(--warn)', not_profitable: 'var(--danger)' };
+  const fillBg = { profitable: 'linear-gradient(90deg,var(--success),#27ae60)',
+                   borderline: 'linear-gradient(90deg,var(--warn),#e67e22)',
+                   not_profitable: 'linear-gradient(90deg,var(--danger),#c0392b)' };
+
+  const v = data.verdict;
+  document.getElementById('pr-verdict-icon').textContent  = icons[v]  || '?';
+  document.getElementById('pr-verdict-label').textContent = labels[v] || v;
+  document.getElementById('pr-verdict-label').style.color = colors[v] || 'var(--text)';
+  card.style.borderColor = colors[v] || 'var(--border)';
+
+  const margin = data.expected_margin_pct || 0;
+  document.getElementById('pr-margin-val').textContent  = margin.toFixed(1) + '%';
+  document.getElementById('pr-margin-val').style.color  = colors[v];
+  const fillPct = Math.min(Math.max(margin, 0), 60) / 60 * 100;
+  const fill = document.getElementById('pr-gauge-fill');
+  fill.style.width      = fillPct + '%';
+  fill.style.background = fillBg[v];
+
+  document.getElementById('pr-stat-revenue').textContent = prFmt(data.quoted_price);
+  document.getElementById('pr-stat-cost').textContent    = prFmt(data.expected_cost);
+  document.getElementById('pr-stat-profit').textContent  = prFmt(data.expected_profit);
+  document.getElementById('pr-stat-profit').style.color  = colors[v];
+
+  const pb = data.pricing_breakdown || {};
+  document.getElementById('pr-stat-recommended').textContent = prFmt(pb.recommended_price);
+  const byWhat = (pb.price_by_area || 0) >= (pb.price_by_points || 0) ? 'לפי שטח' : 'לפי נקודות';
+  const distPct = pb.dist_factor ? ((pb.dist_factor - 1) * 100).toFixed(1) : '0';
+  document.getElementById('pr-stat-recommended-detail').textContent =
+    byWhat + (parseFloat(distPct) > 0 ? ` · +${distPct}% מרחק` : '');
+  document.getElementById('pr-stat-hours').textContent = (pb.actual_hours || 0).toFixed(1) + ' שע׳';
+  document.getElementById('pr-stat-hours-detail').textContent =
+    `נק׳: ${(pb.hours_by_points||0).toFixed(1)} · שטח: ${(pb.hours_by_area||0).toFixed(1)}`;
+
+  document.getElementById('pr-confidence').textContent = (data.prob_profitable || 0) + '%';
+  document.getElementById('pr-n-train').textContent    = (data.model_info || {}).n_train || '?';
+  document.getElementById('pr-cv-acc').textContent     = (data.model_info || {}).cv_accuracy + '%';
+
+  // ── charts zone ──────────────────────────────────────────────────────────
+  document.getElementById('pr-charts-zone').style.display = 'block';
+
+  // Feature importance bar chart
+  const factors = data.top_factors || [];
+  const fNames  = factors.map(f => f.name);
+  const fVals   = factors.map(f => f.importance);
+  const fColors = factors.map(f => f.direction > 0 ? '#00d4ff' : '#e74c3c');
+
+  Plotly.newPlot('pr-factors-chart', [{
+    type: 'bar', orientation: 'h',
+    x: fVals, y: fNames,
+    marker: { color: fColors },
+    text: fVals.map(v => v.toFixed(1) + '%'),
+    textposition: 'outside',
+  }], {
+    margin: { l: 110, r: 30, t: 10, b: 30 },
+    xaxis: { showgrid: false, zeroline: false, showticklabels: false,
+             fixedrange: true },
+    yaxis: { fixedrange: true },
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    font: { family: 'IBM Plex Mono', size: 11, color: '#d0d8f0' },
+  }, { displayModeBar: false, responsive: true });
+
+  // Cost / Revenue breakdown
+  const revenue = data.quoted_price    || 0;
+  const cost    = data.expected_cost   || 0;
+  const profit  = data.expected_profit || 0;
+  const pcol    = profit >= 0 ? '#2ecc71' : '#e74c3c';
+
+  Plotly.newPlot('pr-breakdown-chart', [{
+    type: 'bar',
+    x: ['הכנסה', 'עלות', 'רווח'],
+    y: [revenue, cost, Math.abs(profit)],
+    marker: { color: ['#00d4ff', '#e74c3c', pcol] },
+    text: [prFmt(revenue), prFmt(cost), prFmt(profit)],
+    textposition: 'outside',
+  }], {
+    margin: { l: 20, r: 20, t: 10, b: 30 },
+    yaxis: { showgrid: false, zeroline: false, showticklabels: false, fixedrange: true },
+    xaxis: { fixedrange: true },
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    font: { family: 'IBM Plex Mono', size: 11, color: '#d0d8f0' },
+  }, { displayModeBar: false, responsive: true });
+
+  // Similar projects table
+  const tbody = document.getElementById('pr-similar-tbody');
+  tbody.innerHTML = '';
+  const similar = data.similar_projects || [];
+  if (!similar.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px;">אין פרויקטים דומים בהיסטוריה</td></tr>';
+  } else {
+    similar.forEach(p => {
+      const m    = parseFloat(p.profit_margin_pct) || 0;
+      const mcls = m >= 20 ? 'text-green' : m >= 10 ? 'text-warn' : 'text-red';
+      const tr   = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${p.project_name || p.project_id}</td>
+        <td style="text-align:right;">${p.area_sqm ? Math.round(p.area_sqm).toLocaleString('he-IL') : '—'}</td>
+        <td style="text-align:right;">${p.distance_km != null ? (+p.distance_km).toFixed(1) : '—'}</td>
+        <td style="text-align:right;">${p.quoted_price ? '₪'+Math.round(p.quoted_price).toLocaleString('he-IL') : '—'}</td>
+        <td class="${mcls}" style="text-align:right;font-weight:700;">${m.toFixed(1)}%</td>
+        <td>${p.map_type || '—'}</td>
+        <td>${p.city || '—'}</td>`;
+      tbody.appendChild(tr);
+    });
+  }
+}
+
+// ── predict map (Leaflet custom draw) ────────────────────────────────────────
+let PR_MAP        = null;
+let PR_TILE       = null;
+let PR_POLY_LAYER = null;
+let PR_PREVIEW    = null;
+let PR_CURRENT_BM = 'osm';
+const PR_DRAW     = { mode: false, pts: [], _click: null, _dbl: null };
+
+function setPrBasemap(bm) {
+  PR_CURRENT_BM = bm;
+  document.querySelectorAll('[data-prbm]').forEach(b =>
+    b.classList.toggle('active', b.dataset.prbm === bm));
+  if (!PR_MAP) return;
+  if (PR_TILE) { PR_MAP.removeLayer(PR_TILE); PR_TILE = null; }
+  const cfg = DXF_BASEMAPS[bm];
+  if (cfg?.url) {
+    PR_TILE = L.tileLayer(cfg.url, { attribution: cfg.attr, maxZoom: 21 });
+    PR_TILE.addTo(PR_MAP);
+    PR_TILE.bringToBack();
+  }
+}
+
+function prSetTab(tab) {
+  document.getElementById('pr-zone-draw').style.display = tab === 'draw' ? '' : 'none';
+  document.getElementById('pr-zone-dwg').style.display  = tab === 'dwg'  ? '' : 'none';
+  document.getElementById('pr-tab-draw').classList.toggle('on', tab === 'draw');
+  document.getElementById('pr-tab-dwg').classList.toggle('on',  tab === 'dwg');
+  if (tab === 'draw') setTimeout(prInitMap, 80);
+}
+
+function prInitMap() {
+  if (PR_MAP) { PR_MAP.invalidateSize(); return; }
+  PR_MAP = L.map('pr-map', { zoomControl: true, attributionControl: false });
+  PR_MAP.setView([32.08, 34.88], 9);
+  setPrBasemap(PR_CURRENT_BM);
+}
+
+function prToggleDraw() {
+  if (!PR_MAP) { prInitMap(); setTimeout(prToggleDraw, 150); return; }
+  PR_DRAW.mode = !PR_DRAW.mode;
+  const btn = document.getElementById('pr-btn-draw');
+  const st  = document.getElementById('pr-draw-status');
+  if (PR_DRAW.mode) {
+    PR_DRAW.pts = [];
+    btn.textContent = '⏹ עצור ציור';
+    btn.style.background = '#e74c3c';
+    btn.style.color = '#fff';
+    PR_MAP.getContainer().style.cursor = 'crosshair';
+    if (st) st.textContent = 'לחץ על המפה להוספת נקודות · לחץ פעמיים לסיום';
+    if (!PR_DRAW._click) {
+      PR_DRAW._click = e => {
+        if (!PR_DRAW.mode) return;
+        PR_DRAW.pts.push([e.latlng.lat, e.latlng.lng]);
+        _prUpdatePreview(false);
+        if (st) st.textContent = `נקודות: ${PR_DRAW.pts.length} · לחץ פעמיים לסיום`;
+      };
+      PR_DRAW._dbl = e => {
+        if (!PR_DRAW.mode || PR_DRAW.pts.length < 3) return;
+        L.DomEvent.stop(e);
+        PR_DRAW.mode = false;
+        PR_MAP.getContainer().style.cursor = '';
+        _prUpdatePreview(true);
+        prSetDrawUI(false, true);
+        prCalcGeometry(PR_DRAW.pts);
+      };
+      PR_MAP.on('click', PR_DRAW._click);
+      PR_MAP.on('dblclick', PR_DRAW._dbl);
+    }
+  } else {
+    PR_MAP.getContainer().style.cursor = '';
+    prSetDrawUI(false, PR_DRAW.pts.length >= 3);
+  }
+}
+
+function prSetDrawUI(drawing, hasPoly) {
+  const btn = document.getElementById('pr-btn-draw');
+  const st  = document.getElementById('pr-draw-status');
+  if (!btn) return;
+  if (drawing) {
+    btn.textContent = '⏹ עצור ציור';
+    btn.style.background = '#e74c3c'; btn.style.color = '#fff';
+  } else {
+    btn.textContent = '✏️ צייר פוליגון';
+    btn.style.background = '#f5a623'; btn.style.color = '#111';
+  }
+  if (st) st.textContent = hasPoly ? `✓ פוליגון סגור · ${PR_DRAW.pts.length} נקודות` : '';
+}
+
+function _prUpdatePreview(close) {
+  if (PR_PREVIEW) { try { PR_MAP.removeLayer(PR_PREVIEW); } catch(e){} PR_PREVIEW = null; }
+  if (close) {
+    if (PR_POLY_LAYER) { try { PR_MAP.removeLayer(PR_POLY_LAYER); } catch(e){} }
+    PR_POLY_LAYER = L.polygon(PR_DRAW.pts, { color:'#f5a623', weight:2, fillColor:'#f5a623', fillOpacity:0.13 }).addTo(PR_MAP);
+  } else if (PR_DRAW.pts.length >= 1) {
+    PR_PREVIEW = L.polyline(PR_DRAW.pts, { color:'#f5a623', weight:2, dashArray:'5,5' }).addTo(PR_MAP);
+  }
+}
+
+function prClearDraw() {
+  PR_DRAW.mode = false; PR_DRAW.pts = [];
+  if (PR_MAP) PR_MAP.getContainer().style.cursor = '';
+  if (PR_PREVIEW)   { try { PR_MAP.removeLayer(PR_PREVIEW);   } catch(e){} PR_PREVIEW   = null; }
+  if (PR_POLY_LAYER){ try { PR_MAP.removeLayer(PR_POLY_LAYER);} catch(e){} PR_POLY_LAYER = null; }
+  prSetDrawUI(false, false);
+  prClearGeoStats();
+}
+
+function prReCalcIfPoly() {
+  if (PR_DRAW.pts.length >= 3) prCalcGeometry(PR_DRAW.pts);
+}
+
+async function prCalcGeometry(coords) {
+  const lat = parseFloat(document.getElementById('dt-office-lat').value) || 32.0883;
+  const lon = parseFloat(document.getElementById('dt-office-lon').value) || 34.8878;
+  try {
+    const res  = await fetch(API + '/api/calc-geometry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ polygon: coords, office_lat: lat, office_lon: lon,
+                             map_type: document.getElementById('pr-maptype').value,
+                             terrain:  document.getElementById('pr-terrain').value }),
+    });
+    const data = await res.json();
+    if (data.error) { prShowError(data.error); return; }
+    prApplyGeoResult(data);
+  } catch(e) { prShowError('שגיאת תקשורת: ' + e.message); }
+}
+
+async function prExtractFromDwg() {
+  const path = document.getElementById('pr-dwg-path').value.trim();
+  if (!path) { prShowError('נא להזין נתיב לקובץ DWG'); return; }
+  const lat = parseFloat(document.getElementById('dt-office-lat').value) || 32.0883;
+  const lon = parseFloat(document.getElementById('dt-office-lon').value) || 34.8878;
+  const lbl = document.getElementById('pr-dwg-loading');
+  lbl.style.display = 'inline';
+  prShowError('');
+  try {
+    const res  = await fetch(API + '/api/extract-polygon', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dwg_path: path, office_lat: lat, office_lon: lon }),
+    });
+    const data = await res.json();
+    if (data.error) { prShowError(data.error); return; }
+    prApplyGeoResult(data);
+    // הצג פוליגון על המפה
+    if (data.polygon_wgs84 && data.polygon_wgs84.length) {
+      prSetTab('draw');
+      setTimeout(() => {
+        if (!PR_MAP) { prInitMap(); }
+        setTimeout(() => {
+          if (PR_POLY_LAYER) PR_DRAW_LAYER.removeLayer(PR_POLY_LAYER);
+          PR_POLY_LAYER = L.polygon(data.polygon_wgs84,
+            { color: '#f5a623', weight: 2, fillOpacity: 0.15 });
+          PR_DRAW_LAYER.addLayer(PR_POLY_LAYER);
+          PR_MAP.fitBounds(PR_POLY_LAYER.getBounds(), { padding: [30, 30] });
+        }, 150);
+      }, 80);
+    }
+    // auto-set map type
+    if (data.map_type) {
+      const sel = document.getElementById('pr-maptype');
+      if (['RZ','TZR'].includes(data.map_type)) sel.value = data.map_type;
+    }
+  } catch(e) { prShowError('שגיאת תקשורת: ' + e.message); }
+  finally     { lbl.style.display = 'none'; }
+}
+
+function prApplyGeoResult(data) {
+  document.getElementById('pr-area').value  = data.area_sqm         || 0;
+  // survey_points_raw is terrain-adjusted (formula) — terrain changes reach the model.
+  // survey_points_ml (k-NN) ignores terrain and is shown for reference only.
+  document.getElementById('pr-pts').value   = data.survey_points_raw || 0;
+  document.getElementById('pr-dist').value  = data.distance_km       || 0;
+  document.getElementById('pr-shape').value = data.shape_index        || 1;
+
+  const stats = document.getElementById('pr-geo-stats');
+  stats.style.display = '';
+  document.getElementById('pr-stat-area').textContent  =
+    data.area_sqm    ? Math.round(data.area_sqm).toLocaleString('he-IL') + ' מ"ר' : '—';
+  document.getElementById('pr-stat-perim').textContent =
+    data.perimeter_m ? Math.round(data.perimeter_m) + ' מ\'' : '—';
+  document.getElementById('pr-stat-shape').textContent = data.shape_index || '—';
+  document.getElementById('pr-stat-dist').textContent  =
+    data.distance_km  ? (+data.distance_km).toFixed(1) + ' ק"מ' : '—';
+  document.getElementById('pr-stat-pts-raw').textContent = data.survey_points_raw ?? '—';
+  document.getElementById('pr-stat-pts-ml').textContent  = data.survey_points_ml  != null ? data.survey_points_ml : '(אין נתונים)';
+
+  document.getElementById('pr-run-btn').disabled = false;
+  prShowError('');
+
+  // auto-rerun prediction if results are already showing
+  if (document.getElementById('pr-verdict-zone').style.display !== 'none') runPrediction();
+}
+
+function prClearGeoStats() {
+  ['pr-area','pr-pts','pr-dist','pr-shape'].forEach(id =>
+    { document.getElementById(id).value = ''; });
+  document.getElementById('pr-geo-stats').style.display = 'none';
+  document.getElementById('pr-run-btn').disabled = true;
+}
+
+// ── ניקוי כל הנתונים ─────────────────────────────────────────────────────────
+function dataClearAll() {
+  if (!DT_ROWS.length) { alert('הטבלה כבר ריקה.'); return; }
+  if (!confirm(`למחוק את כל ${DT_ROWS.length} השורות?\nפעולה זו אינה הפיכה.`)) return;
+  DT_ROWS = [];
+  dtRenderTable();
+  dtScheduleSave();
+  const ind = document.getElementById('dt-save-indicator');
+  if (ind) {
+    ind.textContent = '✓ כל הנתונים נוקו';
+    ind.style.display = '';
+    setTimeout(() => ind.style.display = 'none', 3000);
+  }
+}
+
+// ── עדכון חישובים: עלות לשעה + מרחק מהמשרד ──────────────────────────────
+function dataRefreshCalc() {
+  if (!DT_ROWS.length) { alert('אין שורות לעדכן.'); return; }
+  const defaultCost = parseFloat(document.getElementById('dt-hourly-cost')?.value) || 180;
+  const officeLat   = parseFloat(document.getElementById('dt-office-lat')?.value);
+  const officeLon   = parseFloat(document.getElementById('dt-office-lon')?.value);
+  const hasOffice   = isFinite(officeLat) && isFinite(officeLon);
+
+  let updatedDist = 0;
+  DT_ROWS.forEach(row => {
+    row.hourly_cost = defaultCost;
+    if (hasOffice) {
+      const lat = parseFloat(row.center_lat);
+      const lon = parseFloat(row.center_lon);
+      if (isFinite(lat) && isFinite(lon)) {
+        row.distance_km = (haversineM(officeLat, officeLon, lat, lon) / 1000).toFixed(2);
+        updatedDist++;
+      }
+    }
+    dtRecomputeFinance(row);
+  });
+
+  dtRenderTable();
+  dtScheduleSave();
+
+  const ind = document.getElementById('dt-save-indicator');
+  if (ind) {
+    const distPart = hasOffice ? ` · מרחק עודכן ב-${updatedDist} שורות` : '';
+    ind.textContent = `✓ עלות (₪${defaultCost}/ש׳) הוחלה על כל השורות${distPart}`;
+    ind.style.display = '';
+    setTimeout(() => ind.style.display = 'none', 4000);
+  }
+}
+
+// ── CSV Import ───────────────────────────────────────────────────────────────
+
+function dataImportCSV() {
+  document.getElementById('dt-csv-input').click();
+}
+
+function dataImportCSVReplace() {
+  document.getElementById('dt-csv-replace-input').click();
+}
+
+document.getElementById('dt-csv-input').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try { _csvImportRows(_parseCSVText(ev.target.result)); }
+    catch(err) { alert('שגיאה בפירוס הקובץ: ' + err.message); }
+  };
+  reader.readAsText(file, 'utf-8');
+});
+
+document.getElementById('dt-csv-replace-input').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const rows = _parseCSVText(ev.target.result);
+      if (!rows.length) { alert('לא נמצאו שורות בקובץ.'); return; }
+      _csvImportRowsReplace(rows);
+    } catch(err) { alert('שגיאה בפירוס הקובץ: ' + err.message); }
+  };
+  reader.readAsText(file, 'utf-8');
+});
+
+function _parseCSVText(text) {
+  // strip BOM
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const lines = text.split(/\r?\n/);
+  const nonEmpty = lines.filter(l => l.trim() !== '');
+  if (nonEmpty.length < 2) return [];
+  const headers = _parseCSVLine(nonEmpty[0]);
+  return nonEmpty.slice(1).map(line => {
+    const vals = _parseCSVLine(line);
+    const row = {};
+    headers.forEach((h, i) => { row[h.trim()] = (vals[i] ?? '').trim(); });
+    return row;
+  });
+}
+
+function _parseCSVLine(line) {
+  const result = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
+      else inQ = !inQ;
+    } else if (ch === ',' && !inQ) {
+      result.push(cur); cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  result.push(cur);
+  return result;
+}
+
+function _csvImportRows(csvRows) {
+  if (!csvRows.length) { alert('לא נמצאו שורות בקובץ.'); return; }
+
+  const prevById = {};
+  DT_ROWS.forEach(r => { if (r.project_id) prevById[r.project_id] = r; });
+
+  let added = 0, updated = 0, skipped = 0;
+
+  csvRows.forEach(csvRow => {
+    // skip rows that have no meaningful data (all empty)
+    if (Object.values(csvRow).every(v => v === '')) { skipped++; return; }
+
+    const id = csvRow.project_id;
+    csvRow.survey_date = dtNormalizeDate(csvRow.survey_date);
+    csvRow.finish_date = dtNormalizeDate(csvRow.finish_date);
+    dtRecomputeFinance(csvRow);
+
+    if (id && prevById[id]) {
+      // merge: CSV values overwrite only non-empty fields
+      const existing = prevById[id];
+      Object.keys(csvRow).forEach(k => {
+        if (csvRow[k] !== '' && csvRow[k] != null) existing[k] = csvRow[k];
+      });
+      dtRecomputeFinance(existing);
+      updated++;
+    } else {
+      DT_ROWS.push(csvRow);
+      if (id) prevById[id] = csvRow;
+      added++;
+    }
+  });
+
+  dtRenderTable();
+  dtScheduleSave();
+
+  // show status in the existing save-indicator slot
+  const ind = document.getElementById('dt-save-indicator');
+  if (ind) {
+    ind.textContent = `✓ יובאו ${added} חדשות · עודכנו ${updated}` + (skipped ? ` · ${skipped} דולגו` : '');
+    ind.style.display = '';
+    setTimeout(() => { ind.style.display = 'none'; }, 4000);
+  }
+}
+
+async function _csvImportRowsReplace(csvRows) {
+  // normalize & compute finance for each row, drop blank rows
+  const cleaned = [];
+  csvRows.forEach(csvRow => {
+    if (Object.values(csvRow).every(v => v === '')) return;
+    csvRow.survey_date = dtNormalizeDate(csvRow.survey_date);
+    csvRow.finish_date = dtNormalizeDate(csvRow.finish_date);
+    dtRecomputeFinance(csvRow);
+    cleaned.push(csvRow);
+  });
+
+  try {
+    const res = await fetch(API + '/api/training-replace', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ rows: cleaned })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) { alert('שגיאה בשמירה: ' + (data.error || res.status)); return; }
+
+    DT_ROWS = cleaned;
+    dtRenderTable();
+
+    const ind = document.getElementById('dt-save-indicator');
+    if (ind) {
+      ind.textContent = `✓ הוחלף — ${cleaned.length} רשומות חדשות`;
+      ind.style.display = '';
+      setTimeout(() => { ind.style.display = 'none'; }, 5000);
+    }
+  } catch(err) {
+    alert('שגיאת רשת: ' + err.message);
+  }
+}
+
+// ── Session Save / Load ──────────────────────────────────────────────────────
+
+function setSessionDisplay(name) {
+  const chip = document.getElementById('hdr-session-chip');
+  const nameEl = document.getElementById('hdr-session-name');
+  if (name) {
+    nameEl.textContent = name;
+    chip.title = name;
+    chip.style.display = 'inline-flex';
+  } else {
+    chip.style.display = 'none';
+  }
+}
+
+function clearSession() {
+  setSessionDisplay('');
+}
+
+function showSaveModal() {
+  document.getElementById('save-modal-msg').style.display = 'none';
+  document.getElementById('save-modal').style.display = 'flex';
+  document.getElementById('session-name-inp').focus();
+}
+
+function closeSaveModal() {
+  document.getElementById('save-modal').style.display = 'none';
+}
+
+async function browseSessionSaveDir() {
+  try {
+    const r = await fetch(API + '/api/browse');
+    const d = await r.json();
+    if (d.path) document.getElementById('session-dir-inp').value = d.path;
+  } catch(e) {}
+}
+
+function _showSaveMsg(msg, type) {
+  const el = document.getElementById('save-modal-msg');
+  el.textContent = msg;
+  el.style.display = '';
+  el.className = 'alert ' + (type === 'ok' ? 'as' : type === 'err' ? 'ae' : 'ai');
+}
+
+async function confirmSaveSession() {
+  const name = document.getElementById('session-name-inp').value.trim();
+  const dir  = document.getElementById('session-dir-inp').value.trim();
+  if (!name) { _showSaveMsg('נא להזין שם לעבודה', 'err'); return; }
+  if (!dir)  { _showSaveMsg('נא לבחור תיקיית שמירה', 'err'); return; }
+
+  const btn = document.getElementById('save-modal-btn');
+  btn.disabled = true; btn.textContent = 'שומר...';
+
+  try {
+    const r = await fetch(API + '/api/save-session', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ name, save_dir: dir, settings: { output_dir: S.outputDir || '', layer: getLayerValue() } }),
+    });
+    const d = await r.json();
+    if (d.error) { _showSaveMsg('שגיאה: ' + d.error, 'err'); return; }
+    _showSaveMsg('✓ נשמר: ' + d.path, 'ok');
+    setSessionDisplay(name);
+    setTimeout(closeSaveModal, 2000);
+  } catch(e) {
+    _showSaveMsg('שגיאת תקשורת: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false; btn.textContent = '💾 שמור';
+  }
+}
+
+async function doLoadSession() {
+  try {
+    const rb = await fetch(API + '/api/browse-file');
+    const db = await rb.json();
+    if (!db.path) return;
+
+    const r = await fetch(API + '/api/load-session', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ path: db.path }),
+    });
+    const d = await r.json();
+    if (d.error) { alert('שגיאה בטעינה: ' + d.error); return; }
+
+    // Update header
+    setSessionDisplay(d.name);
+    document.getElementById('hdr-polys').textContent = (d.total_features || 0).toLocaleString() + ' ישויות';
+    document.getElementById('hdr-files').textContent = (d.map_count || 0) + ' מפות';
+    setHdrStatus('DONE', 'done');
+
+    // Restore output dir if saved
+    if (d.settings && d.settings.output_dir) {
+      S.outputDir = d.settings.output_dir;
+      document.getElementById('exp-out-dir-display').textContent = S.outputDir;
+    }
+
+    // Unlock pipeline steps
+    unlockPanel(2); markDone(1);
+    unlockPanel(3); markDone(2);
+
+    // Show action buttons
+    document.getElementById('btn-to-export').style.display = 'inline-flex';
+    document.getElementById('btn-save-session').style.display = 'inline-flex';
+
+    // Load map and navigate
+    await _loadParsedMap();
+
+  } catch(e) { alert('שגיאת תקשורת: ' + e.message); }
+}
+</script>
+
+<!-- ── Save Session Modal ── -->
+<div id="save-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeSaveModal()">
+  <div class="modal-box">
+    <div style="font-size:15px;font-weight:600;">💾 שמור עבודה</div>
+    <div class="fg-group">
+      <div class="fg-label">שם העבודה</div>
+      <input id="session-name-inp" class="fc" type="text" placeholder="לדוגמה: עבודה 123-RZ" dir="rtl"
+             onkeydown="if(event.key==='Enter')confirmSaveSession()" />
+    </div>
+    <div class="fg-group">
+      <div class="fg-label">תיקיית שמירה</div>
+      <div class="input-with-btn">
+        <input id="session-dir-inp" class="fc fc-mono" type="text" placeholder="בחר תיקייה..." readonly />
+        <button class="pick-btn" onclick="browseSessionSaveDir()">📂</button>
+      </div>
+    </div>
+    <div id="save-modal-msg" style="display:none;font-size:12px;padding:8px 12px;border-radius:6px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-secondary btn-sm" onclick="closeSaveModal()">ביטול</button>
+      <button class="btn btn-primary btn-sm" id="save-modal-btn" onclick="confirmSaveSession()">💾 שמור</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

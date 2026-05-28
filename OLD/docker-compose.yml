@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  # PostgreSQL + PostGIS
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: survey-gis-db
+    environment:
+      POSTGRES_DB: survey_gis
+      POSTGRES_USER: survey
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: survey-gis-redis
+    ports:
+      - "6379:6379"
+
+  # pgAdmin (DB Management UI)
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: survey-gis-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@survey.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+
+volumes:
+  pgdata:

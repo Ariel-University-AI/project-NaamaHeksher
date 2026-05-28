@@ -1,0 +1,33 @@
+# ===========================
+# GIS — Geographic Intelligence System
+# Phase 1 Dependencies (active)
+# ===========================
+# Install:  pip install -r requirements.txt
+# Future phases: see requirements-future.txt
+#
+# Brand: Amber #f5a623 · Cyan #00d4ff · Navy #0e1520
+# Last updated: 2026-05-27
+#
+# What's covered here:
+#   ✅ ezdxf, pyshp, pyproj  — pipeline core
+#   ✅ numpy                 — profitability model (pure-numpy, no sklearn/scipy)
+#
+# Pure stdlib — no install needed:
+#   server.py, dwg_to_csv.py, csv_to_kml.py
+#   gzip, json, threading, queue, zipfile, io, math, pathlib
+#
+# Not used / removed:
+#   ❌ scikit-learn / scipy  — removed 2026-05-25 (MemoryError, Python 3.14 + scipy 1.17)
+#   ❌ pandas, matplotlib, streamlit, plotly, pydantic
+#
+
+# ── Pipeline core ─────────────────────────────────────────────────
+ezdxf==1.3.6
+pyshp==2.3.1
+pyproj==3.7.1
+
+# ── Profitability model ───────────────────────────────────────────
+# pure-numpy implementation (LR + Ridge) — no scikit-learn needed
+# Model snapshot 2026-05-27: n_train=289, CV=96.1% ± 3.4% (10-fold)
+#   272 profitable / 17 not-profitable (class_weight="balanced")
+numpy>=2.2.1
